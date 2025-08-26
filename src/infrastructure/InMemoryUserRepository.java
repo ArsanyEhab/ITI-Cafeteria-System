@@ -7,12 +7,6 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class InMemoryUserRepository implements IUserRepository {
-    private Map<String, Student> students = new HashMap<>();
-    public Student findById(String studentId) { return students.get(studentId); }
-    @Override
-    public void save(Student student) { students.put(student.getStudentID(), student); }
-
-
      // STUDENT OPERATIONS
     // =================================================================
     
