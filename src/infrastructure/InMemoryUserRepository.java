@@ -3,32 +3,17 @@ package infrastructure;
 import contracts.IUserRepository;
 import domain.Student;
 
-import java.util.HashMap;
-import java.util.Map;
+import java.sql.*;
+import java.util.*;
 
 public class InMemoryUserRepository implements IUserRepository {
      // STUDENT OPERATIONS
     // =================================================================
-    
-    public Student getStudentById(String studentId) {
-        String sql = "SELECT * FROM students WHERE student_id = ?";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, studentId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    Student student = new Student(
-                        rs.getString("name"),
-                        rs.getString("student_id"),
-                        rs.getString("password")
-                    );
-                    student.setLoyaltyPoints(rs.getInt("loyalty_points"));
-                    return student;
-                }
-            }
-        } catch (SQLException e) {
-            System.err.println("❌ Failed to fetch student: " + e.getMessage());
-        }
-        return null;
+    private Connection con;
+
+    public InMemoryUserRepository() {
+        con = DatabaseRepository.getConnection();
+
     }
 
     public boolean addStudent(Student student) {
@@ -106,4 +91,30 @@ public class InMemoryUserRepository implements IUserRepository {
         }
     }
 
+    @Override
+    public Student findById(String studentId) {
+        String sql = "SELECT * FROM students WHERE student_id = ?";
+        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+            pstmt.setString(1, studentId);
+            try (ResultSet rs = pstmt.executeQuery()) {
+                if (rs.next()) {
+                    Student student = new Student(
+                            rs.getString("name"),
+                            rs.getString("student_id"),
+                            rs.getString("password")
+                    );
+                    student.setLoyaltyPoints(rs.getInt("loyalty_points"));
+                    return student;
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("❌ Failed to fetch student: " + e.getMessage());
+        }
+        return null;
+    }
+
+    @Override
+    public void save(Student student) {
+
+    }
 }

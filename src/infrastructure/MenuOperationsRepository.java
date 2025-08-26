@@ -1,11 +1,19 @@
 package infrastructure;
 
+import domain.MenuItem;
+
 import java.sql.*;
 import java.util.*;
 
 public class MenuOperationsRepository {
     // MENU OPERATIONS
     // =================================================================
+
+    private Connection con;
+
+    public MenuOperationsRepository() {
+       con = DatabaseRepository.getConnection();
+    }
 
     public List<MenuItem> getAllMenuItems() {
         List<MenuItem> menuItems = new ArrayList<>();

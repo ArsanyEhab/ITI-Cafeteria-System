@@ -4,6 +4,13 @@ import java.sql.*;
 import java.util.*;
 
 public class StaffOperationRepository {
+
+    Connection con;
+
+    public StaffOperationRepository() {
+        con = DatabaseRepository.getConnection();
+    }
+
     // STAFF OPERATIONS
     // =================================================================
     

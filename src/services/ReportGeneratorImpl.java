@@ -22,7 +22,7 @@ public class ReportGeneratorImpl implements IReportGenerator {
         int year = cal.get(Calendar.YEAR);
         int dayOfYear = cal.get(Calendar.DAY_OF_YEAR);
 
-        return orderRepo.findAll().stream()
+        return orderRepo.getAllOrders().stream()
                 .filter(o -> {
                     Calendar c = Calendar.getInstance();
                     c.setTime(o.getDate());
@@ -42,7 +42,7 @@ public class ReportGeneratorImpl implements IReportGenerator {
         cal.add(Calendar.DAY_OF_YEAR, 7);
         Date end = cal.getTime();
 
-        return orderRepo.findAll().stream()
+        return orderRepo.getAllOrders().stream()
                 .filter(o -> !o.getDate().before(start) && o.getDate().before(end))
                 .mapToDouble(Order::getTotalCost)
                 .sum();

@@ -24,6 +24,10 @@ public class Order {
         this.date = date;
     }
 
+    public Order() {
+
+    }
+
     public void addItem(MenuItem item) {
         items.add(item);
     }
@@ -53,4 +57,5 @@ public class Order {
                 .sum() - discountApplied;
         return totalCost;
     }
+
 }

@@ -32,7 +32,7 @@ public class OrderProcessorImpl implements IOrderProcessor {
         order.calculateTotalCost();          // compute total
         order.setStatus("Preparing");
         loyaltyProgram.awardPoints( student, order.getTotalCost()); // add points
-        orderRepo.save(order);               // persist
+        orderRepo.placeOrder(order);               // persist
         notificationService.sendNotification(student.getStudentID(),
                 "Your order has been placed! Total: " + order.getTotalCost() + " EGP "+"\n Order id is:"+order.getOrderID());
         notificationService.sendNotification(student.getStudentID(),
@@ -46,7 +46,7 @@ public class OrderProcessorImpl implements IOrderProcessor {
             double discount = discountCalculator.calculateDiscountAmount(order, percentage);
             order.setDiscountApplied(discount);
             order.calculateTotalCost();
-            orderRepo.save(order);
+            orderRepo.placeOrder(order);
         }
     }
 
@@ -60,13 +60,13 @@ public class OrderProcessorImpl implements IOrderProcessor {
                         "Your order #" + order.getOrderID() + " is ready for pickup!");
             }
             }
-            orderRepo.save(order);
+            orderRepo.placeOrder(order);
         }
 
 
     // Get all pending orders (for staff view)
     public List<Order> getPendingOrders() {
-        return orderRepo.findAll().stream()
+        return orderRepo.getAllOrders().stream()
                 .filter(o -> "Pending".equals(o.getStatus()))
                 .collect(Collectors.toList());
     }

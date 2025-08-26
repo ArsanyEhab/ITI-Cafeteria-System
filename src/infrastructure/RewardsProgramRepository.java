@@ -7,7 +7,7 @@ public class RewardsProgramRepository {
     private Connection con;
 
     public RewardsProgramRepository() {
-        con = DatabaseRepository.getInstance().getConnection();
+        con = DatabaseRepository.getConnection();
     }
 // REWARDS OPERATIONS
     // =================================================================

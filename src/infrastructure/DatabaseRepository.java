@@ -4,14 +4,10 @@ import domain.MenuItem;
 import domain.Student;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 public class DatabaseRepository {
-    private Connection con;
+    private static Connection con;
 
     // JDBC connection details (example for Aiven MySQL)
     private static final String URL = "jdbc:mysql://cafeteria-system-cafeteria-system.k.aivencloud.com:14411/defaultdb?sslmode=require";
@@ -35,8 +31,8 @@ public class DatabaseRepository {
     }
 
     // Getter to use the connection elsewhere
-    public Connection getConnection() {
-        return this.con;
+    public static Connection getConnection() {
+        return con;
     }
     
     // Close the connection

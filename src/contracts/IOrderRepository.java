@@ -6,6 +6,6 @@ import java.util.List;
 
 public interface IOrderRepository {
     Order findById(int orderId);
-    void save(Order order);
-    List<Order> findAll();
+    boolean placeOrder(Order order);
+    List<Order> getAllOrders();
 }

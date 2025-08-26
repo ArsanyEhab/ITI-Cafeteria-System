@@ -2,13 +2,18 @@ package infrastructure;
 
 import contracts.INotificationService;
 
-import DatabaseRepository;
+import java.sql.*;
+import java.util.*;
 
 import java.util.*;
 
 public class ConsoleNotificationService implements INotificationService {
+    private Connection con;
     private Map<String, List<String>> notifications = new HashMap<>();
 
+    public ConsoleNotificationService() {
+        con = DatabaseRepository.getConnection();
+    }
         // Send a notification to a specific user
         public void sendNotification(String userId, String message) {
             notifications.computeIfAbsent(userId, k -> new ArrayList<>()).add(message);
