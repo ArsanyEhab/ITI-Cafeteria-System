@@ -50,7 +50,6 @@ public class ReportGeneratorImpl implements IReportGenerator {
 
     // FR6.1 Loyalty Redemptions
     public int viewLoyaltyRedemptions() {
-
         return loyaltyProgram.getTotalRedeemedPoints();
     }
 }

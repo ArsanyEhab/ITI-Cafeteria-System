@@ -1,40 +1,47 @@
 package services;
 
-import CrossCutting.IdGenerator;
 import contracts.IMenuAdmin;
 import contracts.IMenuProvider;
 import domain.MenuItem;
 
-import java.util.ArrayList;
 import java.util.List;
 
 public class MenuManager implements IMenuAdmin {
-    private List<MenuItem> items = new ArrayList<>();
+    private IMenuAdmin menuRepository;
+    private IMenuProvider menuProvider;
 
-    // Staff methods
+    // Backward compatible constructor for existing app
+    public MenuManager() {
+        infrastructure.MenuOperationsRepository menuOpsRepo = new infrastructure.MenuOperationsRepository();
+        this.menuRepository = menuOpsRepo;
+        this.menuProvider = menuOpsRepo;
+    }
+
+    // Constructor for dependency injection
+    public MenuManager(IMenuAdmin menuRepository, IMenuProvider menuProvider) {
+        this.menuRepository = menuRepository;
+        this.menuProvider = menuProvider;
+    }
+
+    // Staff methods - delegate to repository
+    @Override
     public MenuItem addMenuItem(String name, String description, double price, String category) {
-        int id = IdGenerator.getInstance().generateNewMenuItemId(); // Generate unique ID
-        MenuItem newItem = new MenuItem(id, name, description, price, category);
-        items.add(newItem);   // add to list
-        return newItem;
+        return menuRepository.addMenuItem(name, description, price, category);
     }
 
+    @Override
     public void editMenuItem(int id, String name, String description, double price, String category) {
-        for (MenuItem item : items) {
-            if (item.getId() == id) {
-                items.remove(item);
-                items.add(new MenuItem(id, name, description, price, category));
-                break;
-            }
-        }
+        menuRepository.editMenuItem(id, name, description, price, category);
     }
 
+    @Override
     public void removeMenuItem(int id) {
-        items.removeIf(item -> item.getId() == id);
-    }
-    public List<MenuItem> getItems() {
-        return items;
+        menuRepository.removeMenuItem(id);
     }
 
+    // Additional method for getting items
+    public List<MenuItem> getItems() {
+        return menuProvider.getMenu();
+    }
 }
 

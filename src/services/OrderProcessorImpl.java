@@ -30,7 +30,7 @@ public class OrderProcessorImpl implements IOrderProcessor {
         order.generateOrderID();             // unique ID
         student.getOrders().add(order);      // add to student history
         order.calculateTotalCost();          // compute total
-        order.setStatus("Preparing");
+        order.setStatus("PENDING");          // Set to PENDING initially (consistent with database)
         loyaltyProgram.awardPoints( student, order.getTotalCost()); // add points
         orderRepo.placeOrder(order);               // persist
         notificationService.sendNotification(student.getStudentID(),
@@ -44,9 +44,20 @@ public class OrderProcessorImpl implements IOrderProcessor {
         Order order = orderRepo.findById(orderId);
         if (order != null) {
             double discount = discountCalculator.calculateDiscountAmount(order, percentage);
-            order.setDiscountApplied(discount);
-            order.calculateTotalCost();
-            orderRepo.placeOrder(order);
+            
+            // Apply discount in database first
+            boolean success = orderRepo.applyDiscountToOrder(orderId, discount);
+            if (success) {
+                // Update the in-memory object as well
+                order.setDiscountApplied(discount);
+                order.calculateTotalCost();
+                System.out.println("✅ Discount of " + percentage + "% (₹" + discount + ") applied to order #" + orderId);
+            } else {
+                System.out.println("❌ Failed to apply discount in database");
+            }
+        } else {
+            System.out.println("❌ Order not found with ID: " + orderId);
+            System.out.println("Cannot apply discount to non-existent order.");
         }
     }
 
@@ -54,20 +65,34 @@ public class OrderProcessorImpl implements IOrderProcessor {
     public void updateOrderStatus(int orderID, String status) {
         Order order = orderRepo.findById(orderID);
         if (order != null) {
-            order.updateStatus(status);
-            if ("Ready for Pickup".equals(status)) {
-                notificationService.sendNotification(order.getStudent().getStudentID(),
-                        "Your order #" + order.getOrderID() + " is ready for pickup!");
+            // Normalize status to uppercase for consistency
+            String normalizedStatus = status.toUpperCase();
+            
+            // Use the proper updateOrderStatus method instead of placeOrder
+            boolean success = orderRepo.updateOrderStatus(orderID, normalizedStatus);
+            if (success) {
+                // Update the in-memory object as well
+                order.updateStatus(normalizedStatus);
+                // Check for ready status (case-insensitive)
+                if ("READY".equalsIgnoreCase(status) || "READY FOR PICKUP".equalsIgnoreCase(status)) {
+                    notificationService.sendNotification(order.getStudent().getStudentID(),
+                            "Your order #" + order.getOrderID() + " is ready for pickup!");
+                }
+                System.out.println("✅ Order #" + orderID + " status updated to: " + normalizedStatus);
+            } else {
+                System.out.println("❌ Failed to update order status in database");
             }
-            }
-            orderRepo.placeOrder(order);
+        } else {
+            System.out.println("❌ Order not found with ID: " + orderID);
+            System.out.println("Please check the order ID and try again.");
         }
+    }
 
 
     // Get all pending orders (for staff view)
     public List<Order> getPendingOrders() {
         return orderRepo.getAllOrders().stream()
-                .filter(o -> "Pending".equals(o.getStatus()))
+                .filter(o -> "PENDING".equalsIgnoreCase(o.getStatus()))
                 .collect(Collectors.toList());
     }
 }

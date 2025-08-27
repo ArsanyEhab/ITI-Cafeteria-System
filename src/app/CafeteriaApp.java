@@ -281,23 +281,55 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
     }
 
     private static void viewPendingOrders() {
-        orderProcessor.getPendingOrders().forEach(order ->
-                System.out.println("Order " + order.getOrderID() + " - Status: " + order.getStatus())
-        );
+        System.out.println("\n=== All Orders ===");
+        var allOrders = orderRepo.getAllOrders();
+        if (allOrders.isEmpty()) {
+            System.out.println("No orders found in the system.");
+        } else {
+            allOrders.forEach(order ->
+                System.out.println("Order #" + order.getOrderID() + 
+                    " - Student: " + order.getStudent().getName() +
+                    " - Status: " + order.getStatus() +
+                    " - Total: " + order.getTotalCost() + " EGP")
+            );
+        }
+        
+        System.out.println("\n=== Pending Orders Only ===");
+        var pendingOrders = orderProcessor.getPendingOrders();
+        if (pendingOrders.isEmpty()) {
+            System.out.println("No pending orders found.");
+        } else {
+            pendingOrders.forEach(order ->
+                System.out.println("Order #" + order.getOrderID() + 
+                    " - Student: " + order.getStudent().getName() +
+                    " - Total: " + order.getTotalCost() + " EGP")
+            );
+        }
     }
 
     private static void updateOrderStatus() {
-        System.out.print("Enter Order ID: ");
-        int id = sc.nextInt(); sc.nextLine();
-        System.out.print("New Status (Pending/Preparing/Ready for Pickup): ");
-        String status = sc.nextLine();
-        orderProcessor.updateOrderStatus(id, status);
-
-        if (currentStudent != null) {
-            notificationService.sendNotification(currentStudent.getStudentID(), status);
+        // First show available orders
+        System.out.println("\n=== Available Orders ===");
+        var allOrders = orderRepo.getAllOrders();
+        if (allOrders.isEmpty()) {
+            System.out.println("No orders available to update.");
+            return;
         }
-
-        System.out.println("Order updated.");
+        
+        allOrders.forEach(order ->
+            System.out.println("Order #" + order.getOrderID() + 
+                " - Student: " + order.getStudent().getName() +
+                " - Current Status: " + order.getStatus() +
+                " - Total: " + order.getTotalCost() + " EGP")
+        );
+        
+        System.out.print("\nEnter Order ID: ");
+        int id = sc.nextInt(); sc.nextLine();
+        System.out.print("New Status (pending/preparing/ready - case insensitive): ");
+        String status = sc.nextLine();
+        
+        // The error handling is now done in OrderProcessorImpl.updateOrderStatus()
+        orderProcessor.updateOrderStatus(id, status);
     }
     private static void viewDailySales() {
         System.out.print("Enter date (yyyy-mm-dd): ");

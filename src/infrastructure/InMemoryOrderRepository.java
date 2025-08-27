@@ -57,7 +57,7 @@ public class InMemoryOrderRepository implements IOrderRepository {
 
     public List<Order> getStudentOrders(String studentId) {
         List<Order> orders = new ArrayList<>();
-        InMemoryUserRepository db = new InMemoryUserRepository();
+        infrastructure.InMemoryUserRepository db = new infrastructure.InMemoryUserRepository();
         String sql = "SELECT o.* FROM orders o WHERE o.student_id = ? ORDER BY o.order_date DESC";
 
         try (PreparedStatement pstmt = con.prepareStatement(sql)) {
@@ -168,7 +168,7 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 orderStmt.setString(2, order.getStudent().getStudentID());
                 orderStmt.setDouble(3, order.getTotalCost());
                 orderStmt.setDouble(4, 0); // Default discount
-                orderStmt.setString(5, "PENDING");
+                orderStmt.setString(5, order.getStatus().toUpperCase()); // Use normalized status
                 orderStmt.executeUpdate();
             }
 
@@ -320,7 +320,7 @@ public class InMemoryOrderRepository implements IOrderRepository {
     }
 
     public boolean applyDiscountToOrder(int orderId, double discountAmount) {
-        String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND status = 'PENDING'";
+        String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND UPPER(status) = 'PENDING'";
         try (PreparedStatement pstmt = con.prepareStatement(sql)) {
             pstmt.setDouble(1, discountAmount);
             pstmt.setDouble(2, discountAmount);

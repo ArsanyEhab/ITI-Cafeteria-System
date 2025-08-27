@@ -6,42 +6,28 @@ import contracts.IUserRepository;
 import domain.IStudent;
 import domain.Student;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class StudentManager implements IStudentManager {
-    private List<IStudent> students = new ArrayList<>();
-    IUserRepository userRepo;
-    INotificationService notifier;
+    private IStudentManager studentRepository;
+    private IUserRepository userRepo;
+
+    public StudentManager(IStudentManager studentRepository, IUserRepository userRepo, INotificationService notifier) {
+        this.studentRepository = studentRepository;
+        this.userRepo = userRepo;
+        // notifier can be used for future notifications if needed
+    }
 
     @Override
-    public IStudent registerStudent(String name, String studentID,String password) {
-        for (IStudent s : students) {
-            if (s.getStudentID().equals(studentID)&&s.getPassword().equals(password)) {
-                System.out.println(" Student ID already exists");
-                return null;
-            }
+    public IStudent registerStudent(String name, String studentID, String password) {
+        IStudent student = studentRepository.registerStudent(name, studentID, password);
+        if (student != null) {
+            // Save to user repository as well for consistency
+            userRepo.save((Student) student);
         }
-
-        IStudent student = new Student(name, studentID,password);
-        students.add(student);
-        System.out.println(" Student registered: " + name);
         return student;
     }
-    @Override
-    public IStudent login(String studentID, String name,String password) {
-        for (IStudent s : students) {
-            if (s.getStudentID().equals(studentID) && s.getName().equals(name)) {
-                System.out.println(" Login successful for: " + s.getName());
-                return s;
-            }
-        }
-        System.out.println("Invalid studentID or password!");
-        return null;
-    }
-    public  StudentManager(IUserRepository userRepo, INotificationService notifier){
-        this.userRepo=userRepo;
-        this.notifier=notifier;
 
+    @Override
+    public IStudent login(String studentID, String name, String password) {
+        return studentRepository.login(studentID, name, password);
     }
 }

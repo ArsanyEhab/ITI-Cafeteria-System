@@ -12,21 +12,21 @@ public class PaymentTech implements IPaymentInterface {
         if (orderId != 0) {
             System.out.println("Choose Way to pay");
             System.out.println("1. Cash");
-            System.out.println("2. Visa");
+            System.out.println("2. Card");
             int choice = sc.nextInt();
             sc.nextLine();
 
             switch (choice) {
                 case 1 -> System.out.println("Payment done by Cash ");
                 case 2 -> {
-                    System.out.print("Enter your Visa number: ");
-                    String visa = sc.nextLine();
-                    //Check if it is 16 and start with 4
-                    if (visa.matches("^4[0-9]{15}$")) {
-                        System.out.println("Visa accepted ");
-                        System.out.println( "Payment done by Visa.");
+                    System.out.print("Enter your Card number: ");
+                    String card = sc.nextLine();
+                    //Check if it is 16 and numbers only
+                    if (card.matches("^[0-9]{16}$")) {
+                        System.out.println("Card accepted ");
+                        System.out.println( "Payment done by Card.");
                     } else {
-                        System.out.println(" Invalid Visa number. Payment failed.");
+                        System.out.println(" Invalid Card number. Payment failed.");
                     }
                 }
                 default -> System.out.println("Invalid choice");

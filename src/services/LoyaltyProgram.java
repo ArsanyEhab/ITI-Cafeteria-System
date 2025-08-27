@@ -3,73 +3,47 @@ package services;
 import contracts.ILoyaltyProgram;
 import contracts.IRewardStrategy;
 import domain.IStudent;
-import domain.Student;
+
 
 public class LoyaltyProgram implements ILoyaltyProgram {
-    private IRewardStrategy rewardStrategy;
-    private static int totalRedeemedPoints =0;
+    private ILoyaltyProgram loyaltyRepository;
 
+    // Backward compatible constructor for existing app
     public LoyaltyProgram(IRewardStrategy rewardStrategy) {
-        this.rewardStrategy = rewardStrategy;
+        this.loyaltyRepository = new infrastructure.DatabaseLoyaltyRepository(rewardStrategy);
     }
 
+    // New constructor for dependency injection
+    public LoyaltyProgram(ILoyaltyProgram loyaltyRepository, IRewardStrategy rewardStrategy) {
+        this.loyaltyRepository = loyaltyRepository;
+        // rewardStrategy is passed to the repository during construction
+    }
 
     @Override
     public void awardPoints(IStudent student, double orderValue) {
-        rewardStrategy.applyReward((Student) student,orderValue);
-        System.out.println("Points awarded! Current Balance: " + student.getLoyaltyPoints());
-
+        loyaltyRepository.awardPoints(student, orderValue);
     }
 
     @Override
     public void redeemPoints(IStudent student, String reward) {
-        int currentPoints = student.getLoyaltyPoints();
-
-        switch (reward.toLowerCase()) {
-            case "coffee":
-                if (currentPoints >= 100) {
-                    deductPoints(student, 100);
-                    System.out.println("Redeemed 100 points for a FREE Coffee!");
-
-                } else {
-                    System.out.println("Not enough points for free coffee.");
-                }
-                break;
-
-            case "discount10":
-                if (currentPoints >= 50) {
-                    deductPoints(student, 50);
-                    System.out.println("Redeemed 50 points for a 10 EGP discount!");
-                    //  OrderProcessor
-                } else {
-                    System.out.println("Not enough points for discount.");
-                }
-                break;
-
-            default:
-                System.out.println("Invalid reward option.");
-        }
+        loyaltyRepository.redeemPoints(student, reward);
     }
-
 
     @Override
     public void deductPoints(IStudent student, int points) {
-        int currentPoints = student.getLoyaltyPoints();
-        if (currentPoints >= points) {
-            student.setLoyaltyPoints(currentPoints - points);
-            totalRedeemedPoints += points;
-        } else {
-            System.out.println("Not enough points to deduct.");
-        }
-
+        loyaltyRepository.deductPoints(student, points);
     }
 
     @Override
     public void setRewardStrategy(IRewardStrategy strategy) {
-        this.rewardStrategy = strategy;
-
+        loyaltyRepository.setRewardStrategy(strategy);
     }
+
     public int getTotalRedeemedPoints() {
-        return totalRedeemedPoints;
+        // Delegate to repository if it has this method
+        if (loyaltyRepository instanceof infrastructure.DatabaseLoyaltyRepository) {
+            return ((infrastructure.DatabaseLoyaltyRepository) loyaltyRepository).getTotalRedeemedPoints();
+        }
+        return 0;
     }
 }
