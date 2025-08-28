@@ -8,11 +8,9 @@ import domain.Student;
 import java.sql.*;
 
 public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
-    private Connection con;
     private IRewardStrategy rewardStrategy;
 
     public DatabaseLoyaltyRepository(IRewardStrategy rewardStrategy) {
-        con = DatabaseRepository.getConnection();
         this.rewardStrategy = rewardStrategy;
     }
 
@@ -74,55 +72,55 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
     }
 
     private void updateStudentPoints(IStudent student) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            // Silent operation in offline mode
-            return;
-        }
-        
         String sql = "UPDATE students SET loyalty_points = ? WHERE student_id = ?";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setInt(1, student.getLoyaltyPoints());
-            pstmt.setString(2, student.getStudentID());
-            pstmt.executeUpdate();
+        Connection con = DatabaseRepository.createNewConnection();
+        try {
+            if (con == null) return;
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setInt(1, student.getLoyaltyPoints());
+                pstmt.setString(2, student.getStudentID());
+                pstmt.executeUpdate();
+            }
         } catch (SQLException e) {
             System.err.println("❌ Failed to update student points: " + e.getMessage());
+        } finally {
+            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
         }
     }
 
     private void recordRedemption(String studentId, String rewardType, int pointsUsed) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            // Silent operation in offline mode
-            return;
-        }
-        
         String sql = "INSERT INTO loyalty_redemptions (student_id, reward_type, points_used, redemption_date) VALUES (?, ?, ?, NOW())";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, studentId);
-            pstmt.setString(2, rewardType);
-            pstmt.setInt(3, pointsUsed);
-            pstmt.executeUpdate();
+        Connection con = DatabaseRepository.createNewConnection();
+        try {
+            if (con == null) return;
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, studentId);
+                pstmt.setString(2, rewardType);
+                pstmt.setInt(3, pointsUsed);
+                pstmt.executeUpdate();
+            }
         } catch (SQLException e) {
             System.err.println("❌ Failed to record redemption: " + e.getMessage());
+        } finally {
+            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
         }
     }
 
     public int getTotalRedeemedPoints() {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            return 0;
-        }
-        
         String sql = "SELECT SUM(points_used) as total FROM loyalty_redemptions";
-        try (Statement stmt = con.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
-            
-            if (rs.next()) {
-                return rs.getInt("total");
+        Connection con = DatabaseRepository.createNewConnection();
+        try {
+            if (con == null) return 0;
+            try (Statement stmt = con.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
+                if (rs.next()) {
+                    return rs.getInt("total");
+                }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to get total redeemed points: " + e.getMessage());
+        } finally {
+            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
         }
         return 0;
     }
@@ -130,15 +128,21 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
     // Additional methods for loyalty program management
     public int getStudentTotalRedemptions(String studentId) {
         String sql = "SELECT SUM(points_used) as total FROM loyalty_redemptions WHERE student_id = ?";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, studentId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    return rs.getInt("total");
+        Connection con = DatabaseRepository.createNewConnection();
+        try {
+            if (con == null) return 0;
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, studentId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        return rs.getInt("total");
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to get student redemptions: " + e.getMessage());
+        } finally {
+            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
         }
         return 0;
     }

@@ -7,13 +7,9 @@ import domain.Student;
 import java.sql.*;
 import java.util.*;
 
-public class InMemoryOrderRepository implements IOrderRepository {
+public class DatabaseOrderRepository implements IOrderRepository {
 
-    private Connection con;
-
-    public InMemoryOrderRepository() {
-        con = DatabaseRepository.getConnection();
-    }
+    public DatabaseOrderRepository() { }
     // ORDER OPERATIONS
     // =================================================================
 
@@ -22,8 +18,10 @@ public class InMemoryOrderRepository implements IOrderRepository {
         List<Order> orders = new ArrayList<>();
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id";
 
-        try (Statement stmt = con.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             Statement stmt = con != null ? con.createStatement() : null;
+             ResultSet rs = stmt != null ? stmt.executeQuery(sql) : null) {
+            if (stmt == null || rs == null) return orders;
 
             while (rs.next()) {
                 // Create student object
@@ -60,7 +58,9 @@ public class InMemoryOrderRepository implements IOrderRepository {
         infrastructure.InMemoryUserRepository db = new infrastructure.InMemoryUserRepository();
         String sql = "SELECT o.* FROM orders o WHERE o.student_id = ? ORDER BY o.order_date DESC";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return orders;
             pstmt.setString(1, studentId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -92,7 +92,9 @@ public class InMemoryOrderRepository implements IOrderRepository {
         List<Order> orders = new ArrayList<>();
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id WHERE o.status = ?";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return orders;
             pstmt.setString(1, status);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -130,7 +132,9 @@ public class InMemoryOrderRepository implements IOrderRepository {
         List<MenuItem> items = new ArrayList<>();
         String sql = "SELECT m.*, oi.quantity FROM order_items oi JOIN menu_items m ON oi.menu_item_id = m.menu_item_id WHERE oi.order_id = ?";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return items;
             pstmt.setInt(1, orderId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -155,8 +159,8 @@ public class InMemoryOrderRepository implements IOrderRepository {
 
     @Override
     public boolean placeOrder(Order order) {
-        try {
-            // Start transaction
+        try (Connection con = DatabaseRepository.createNewConnection()) {
+            if (con == null) return false;
             con.setAutoCommit(false);
 
             // 1. Insert order record
@@ -203,26 +207,16 @@ public class InMemoryOrderRepository implements IOrderRepository {
             return true;
 
         } catch (SQLException e) {
-            try {
-                con.rollback();
-            } catch (SQLException ex) {
-                System.err.println("❌ Rollback failed: " + ex.getMessage());
-            }
+            System.err.println("❌ Failed to place order: " + e.getMessage());
             System.err.println("❌ Failed to place order: " + e.getMessage());
             return false;
-        } finally {
-            try {
-                con.setAutoCommit(true);
-            } catch (SQLException e) {
-                System.err.println("❌ Failed to reset auto-commit: " + e.getMessage());
-            }
         }
     }
 
     public boolean updateOrderStatus(int orderId, String status) {
         String sql = "UPDATE orders SET status = ? WHERE order_id = ?";
-        try {
-            // Start transaction
+        try (Connection con = DatabaseRepository.createNewConnection()) {
+            if (con == null) return false;
             con.setAutoCommit(false);
 
             // 1. Update order status
@@ -231,8 +225,6 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 pstmt.setInt(2, orderId);
                 int rowsAffected = pstmt.executeUpdate();
                 if (rowsAffected == 0) {
-                    con.rollback();
-                    con.setAutoCommit(true);
                     return false;
                 }
             }
@@ -303,25 +295,16 @@ public class InMemoryOrderRepository implements IOrderRepository {
             return true;
 
         } catch (SQLException e) {
-            try {
-                con.rollback();
-            } catch (SQLException ex) {
-                System.err.println("❌ Rollback failed: " + ex.getMessage());
-            }
             System.err.println("❌ Failed to update order status: " + e.getMessage());
             return false;
-        } finally {
-            try {
-                con.setAutoCommit(true);
-            } catch (SQLException e) {
-                System.err.println("❌ Failed to reset auto-commit: " + e.getMessage());
-            }
         }
     }
 
     public boolean applyDiscountToOrder(int orderId, double discountAmount) {
         String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND UPPER(status) = 'PENDING'";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return false;
             pstmt.setDouble(1, discountAmount);
             pstmt.setDouble(2, discountAmount);
             pstmt.setInt(3, orderId);
@@ -334,8 +317,8 @@ public class InMemoryOrderRepository implements IOrderRepository {
     }
 
     public boolean deleteOrder(int orderId) {
-        try {
-            // Start transaction
+        try (Connection con = DatabaseRepository.createNewConnection()) {
+            if (con == null) return false;
             con.setAutoCommit(false);
 
             // 1. Delete order items first (due to foreign key constraint)
@@ -351,8 +334,6 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 deleteOrderStmt.setInt(1, orderId);
                 int rowsAffected = deleteOrderStmt.executeUpdate();
                 if (rowsAffected == 0) {
-                    con.rollback();
-                    con.setAutoCommit(true);
                     return false;
                 }
             }
@@ -361,19 +342,8 @@ public class InMemoryOrderRepository implements IOrderRepository {
             return true;
 
         } catch (SQLException e) {
-            try {
-                con.rollback();
-            } catch (SQLException ex) {
-                System.err.println("❌ Rollback failed: " + ex.getMessage());
-            }
             System.err.println("❌ Failed to delete order: " + e.getMessage());
             return false;
-        } finally {
-            try {
-                con.setAutoCommit(true);
-            } catch (SQLException e) {
-                System.err.println("❌ Failed to reset auto-commit: " + e.getMessage());
-            }
         }
     }
 
@@ -385,7 +355,8 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 "GROUP BY DATE(order_date) " +
                 "ORDER BY date";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
             pstmt.setString(1, startDate);
             pstmt.setString(2, endDate);
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -414,7 +385,8 @@ public class InMemoryOrderRepository implements IOrderRepository {
                 "ORDER BY total_quantity DESC " +
                 "LIMIT ?";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con.prepareStatement(sql)) {
             pstmt.setInt(1, limit);
             try (ResultSet rs = pstmt.executeQuery()) {
                 while (rs.next()) {
@@ -438,7 +410,9 @@ public class InMemoryOrderRepository implements IOrderRepository {
     public Order findById(int orderId) {
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id WHERE o.order_id = ?";
 
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return null;
             pstmt.setInt(1, orderId);
             try (ResultSet rs = pstmt.executeQuery()) {
                 if (rs.next()) {

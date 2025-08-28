@@ -9,23 +9,14 @@ import java.sql.*;
 import java.util.*;
 
 public class DatabaseUserRepository implements IUserRepository, IStudentManager {
-    private Connection con;
-
-    public DatabaseUserRepository() {
-        con = DatabaseRepository.getConnection();
-    }
+    public DatabaseUserRepository() { }
 
     @Override
     public Student findById(String studentId) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            // Return null in offline mode - no students available
-            return null;
-        }
-        
         String sql = "SELECT * FROM students WHERE student_id = ?";
-        
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return null;
             pstmt.setString(1, studentId);
             
             try (ResultSet rs = pstmt.executeQuery()) {
@@ -47,12 +38,6 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
 
     @Override
     public void save(Student student) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            // Silent operation in offline mode
-            return;
-        }
-        
         // First try to update existing student
         if (updateStudent(student)) {
             return;
@@ -63,7 +48,9 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
 
     private boolean addStudent(Student student) {
         String sql = "INSERT INTO students (student_id, name, password, loyalty_points) VALUES (?, ?, ?, ?)";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return false;
             pstmt.setString(1, student.getStudentID());
             pstmt.setString(2, student.getName());
             pstmt.setString(3, student.getPassword());
@@ -81,7 +68,9 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
 
     private boolean updateStudent(Student student) {
         String sql = "UPDATE students SET name = ?, password = ?, loyalty_points = ? WHERE student_id = ?";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return false;
             pstmt.setString(1, student.getName());
             pstmt.setString(2, student.getPassword());
             pstmt.setInt(3, student.getLoyaltyPoints());
@@ -97,14 +86,6 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
     // IStudentManager implementation
     @Override
     public IStudent registerStudent(String name, String studentID, String password) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            // Create student in memory for offline mode
-            Student student = new Student(name, studentID, password);
-            System.out.println("⚠️ Offline mode: Student created in memory only: " + name);
-            return student;
-        }
-        
         // Check if student already exists
         Student existingStudent = findById(studentID);
         if (existingStudent != null) {
@@ -122,12 +103,6 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
 
     @Override
     public IStudent login(String studentID, String name, String password) {
-        // Handle offline mode
-        if (con == null || DatabaseRepository.getConnection() == null) {
-            System.out.println("⚠️ Offline mode: Cannot verify login credentials");
-            return null;
-        }
-        
         Student student = findById(studentID);
         if (student != null && student.getName().equals(name) && student.getPassword().equals(password)) {
             System.out.println("✅ Login successful for: " + student.getName());
@@ -141,9 +116,10 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
     public List<Student> getAllStudents() {
         List<Student> students = new ArrayList<>();
         String sql = "SELECT * FROM students";
-        
-        try (Statement stmt = con.createStatement();
-             ResultSet rs = stmt.executeQuery(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             Statement stmt = con != null ? con.createStatement() : null;
+             ResultSet rs = stmt != null ? stmt.executeQuery(sql) : null) {
+            if (stmt == null || rs == null) return students;
             
             while (rs.next()) {
                 Student student = new Student(
@@ -162,7 +138,9 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
 
     public boolean deleteStudent(String studentId) {
         String sql = "DELETE FROM students WHERE student_id = ?";
-        try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+        try (Connection con = DatabaseRepository.createNewConnection();
+             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
+            if (pstmt == null) return false;
             pstmt.setString(1, studentId);
             int rowsAffected = pstmt.executeUpdate();
             if (rowsAffected > 0) {

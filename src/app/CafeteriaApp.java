@@ -3,11 +3,10 @@ package app;
 import CrossCutting.DiscountCalculator;
 import contracts.*;
 import domain.Student;
+import domain.Staff;
 import domain.MenuItem;
 import domain.Order;
-import infrastructure.ConsoleNotificationService;
-import infrastructure.InMemoryOrderRepository;
-import infrastructure.InMemoryUserRepository;
+import infrastructure.*;
 import services.*;
 
 import java.util.*;
@@ -17,7 +16,7 @@ public class CafeteriaApp {
 
     // Infrastructure
     private static IUserRepository userRepo = new InMemoryUserRepository();
-    private static IOrderRepository orderRepo = new InMemoryOrderRepository();
+    private static IOrderRepository orderRepo = new DatabaseOrderRepository();
     private static INotificationService notificationService = new ConsoleNotificationService();
 
     // Services
@@ -26,12 +25,14 @@ public class CafeteriaApp {
     private static DiscountCalculator discountCalculator = new DiscountCalculator();
     private static MenuManager menuManager = new MenuManager();
     private static MenuProvider menuProvider = new MenuProvider(menuManager.getItems());
+    private static IStaffRepository staffRepo = new DatabaseStaffRepository();
     private static IReportGenerator reportGenerator = new ReportGeneratorImpl(orderRepo, loyaltyProgram);
 
     private static OrderProcessorImpl orderProcessor =
             new OrderProcessorImpl(orderRepo, loyaltyProgram, notificationService, discountCalculator);
 private static IPaymentInterface paymentInterface=new PaymentTech();
     private static Student currentStudent = null; // logged in student
+    private static Staff currentStaff = null; // logged in staff (admin or staff)
 
     public static void main(String[] args) {
         while (true) {
@@ -192,17 +193,35 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
     private static void staffMenu() {
         while (true) {
             System.out.println("\n--- Staff Menu ---");
-            System.out.println("1. View Pending Orders");
-            System.out.println("2. Update Order Status");
-            System.out.println("0. Back");
+            if (currentStaff == null) {
+                System.out.println("1. Register");
+                System.out.println("2. Login");
+                System.out.println("0. Back");
+            } else {
+                System.out.println("Logged in as: " + currentStaff.getName() + (currentStaff.isAdmin() ? " (admin)" : " (staff)"));
+                System.out.println("1. View Pending Orders");
+                System.out.println("2. Update Order Status");
+                System.out.println("9. Logout");
+                System.out.println("0. Back");
+            }
             System.out.print("Choose: ");
             int choice = sc.nextInt(); sc.nextLine();
 
-            switch (choice) {
-                case 1 -> viewPendingOrders();
-                case 2 -> updateOrderStatus();
-                case 0 -> { return; }
-                default -> System.out.println("Invalid choice");
+            if (currentStaff == null) {
+                switch (choice) {
+                    case 1 -> registerStaff(false);
+                    case 2 -> loginStaff();
+                    case 0 -> { return; }
+                    default -> System.out.println("Invalid choice");
+                }
+            } else {
+                switch (choice) {
+                    case 1 -> viewPendingOrders();
+                    case 2 -> updateOrderStatus();
+                    case 9 -> { currentStaff = null; System.out.println("Logged out."); }
+                    case 0 -> { return; }
+                    default -> System.out.println("Invalid choice");
+                }
             }
         }
     }
@@ -211,33 +230,85 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
     private static void adminStaffMenu() {
         while (true) {
             System.out.println("\n--- Admin Staff Menu ---");
-            System.out.println("1. Add Menu Item");
-            System.out.println("2. Edit Menu Item");
-            System.out.println("3. Remove Menu Item");
-            System.out.println("4. View Pending Orders");
-            System.out.println("5. Update Order Status");
-            System.out.println("6. View Daily Sales Report");
-            System.out.println("7. View Weekly Sales Report");
-            System.out.println("8. View Loyalty Point Redemptions");
-            System.out.println("0. Back");
+            if (currentStaff == null) {
+                System.out.println("1. Register Admin");
+                System.out.println("2. Login");
+                System.out.println("0. Back");
+            } else if (!currentStaff.isAdmin()) {
+                System.out.println("Access denied. Admin role required.");
+                System.out.println("9. Logout");
+                System.out.println("0. Back");
+            } else {
+                System.out.println("Logged in as: " + currentStaff.getName() + " (admin)");
+                System.out.println("1. Add Menu Item");
+                System.out.println("2. Edit Menu Item");
+                System.out.println("3. Remove Menu Item");
+                System.out.println("4. View Pending Orders");
+                System.out.println("5. Update Order Status");
+                System.out.println("6. View Daily Sales Report");
+                System.out.println("7. View Weekly Sales Report");
+                System.out.println("8. View Loyalty Point Redemptions");
+                System.out.println("9. Logout");
+                System.out.println("0. Back");
+            }
             System.out.print("Choose: ");
             int choice = sc.nextInt(); sc.nextLine();
 
-            switch (choice) {
-                case 1 -> addMenuItem();
-                case 2 -> editMenuItem();
-                case 3 -> removeMenuItem();
-                case 4 -> viewPendingOrders();
-                case 5 -> updateOrderStatus();
-                case 6 -> viewDailySales();
-                case 7 -> viewWeeklySales();
-                case 8 -> viewLoyaltyRedemptions();
-                case 0 -> { return; }
-                default -> System.out.println("Invalid choice");
+            if (currentStaff == null) {
+                switch (choice) {
+                    case 1 -> registerStaff(true);
+                    case 2 -> loginStaff();
+                    case 0 -> { return; }
+                    default -> System.out.println("Invalid choice");
+                }
+            } else if (!currentStaff.isAdmin()) {
+                switch (choice) {
+                    case 9 -> { currentStaff = null; System.out.println("Logged out."); }
+                    case 0 -> { return; }
+                    default -> System.out.println("Access denied.");
+                }
+            } else {
+                switch (choice) {
+                    case 1 -> addMenuItem();
+                    case 2 -> editMenuItem();
+                    case 3 -> removeMenuItem();
+                    case 4 -> viewPendingOrders();
+                    case 5 -> updateOrderStatus();
+                    case 6 -> viewDailySales();
+                    case 7 -> viewWeeklySales();
+                    case 8 -> viewLoyaltyRedemptions();
+                    case 9 -> { currentStaff = null; System.out.println("Logged out."); }
+                    case 0 -> { return; }
+                    default -> System.out.println("Invalid choice");
+                }
             }
         }
 
 }
+
+    private static void registerStaff(boolean asAdmin) {
+        System.out.print("Enter Staff ID: ");
+        String id = sc.nextLine();
+        System.out.print("Enter Name: ");
+        String name = sc.nextLine();
+        System.out.print("Enter Password: ");
+        String pass = sc.nextLine();
+        boolean ok = staffRepo.registerStaff(id, name, pass, asAdmin);
+        if (ok) {
+            System.out.println("Staff registered successfully." + (asAdmin ? " (admin)" : ""));
+        }
+    }
+
+    private static void loginStaff() {
+        System.out.print("Enter Staff ID: ");
+        String id = sc.nextLine();
+        System.out.print("Enter Password: ");
+        String pass = sc.nextLine();
+        Staff s = staffRepo.login(id, pass);
+        if (s != null) {
+            currentStaff = s;
+        }
+    }
 
     // =========== Common Methods for Staff/Admin ===========
     private static void addMenuItem() {
