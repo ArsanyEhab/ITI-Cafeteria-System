@@ -1,0 +1,6 @@
+
+.root { -fx-background-color: white; -fx-font-family: 'Segoe UI'; }
+.button { -fx-background-color: #1e90ff; -fx-text-fill: white; -fx-font-weight: bold; -fx-background-radius: 8; }
+.text-field, .password-field, .combo-box { -fx-background-color: white; -fx-border-color: #e5e7eb; -fx-border-radius: 8; -fx-background-radius: 8; }
+.label.title { -fx-font-size: 22px; -fx-font-weight: bold; }
+.card { -fx-background-color: white; -fx-border-color: #e5e7eb; -fx-border-radius: 16; -fx-background-radius: 16; -fx-padding: 16; -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.05), 10, 0, 0, 2); }

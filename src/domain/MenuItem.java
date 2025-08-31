@@ -14,7 +14,12 @@ public class MenuItem {
     //Setters and Getters
     public int getId() { return id; }
     public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
     public double getPrice() { return price; }
+    public String getCategory() { return category; }
+    public void setPrice(double price) { this.price = price; }
 
     // Used Methods
     public String getDetails() {

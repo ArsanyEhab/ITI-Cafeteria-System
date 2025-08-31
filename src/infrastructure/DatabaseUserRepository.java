@@ -105,7 +105,7 @@ public class DatabaseUserRepository implements IUserRepository, IStudentManager 
     public IStudent login(String studentID, String name, String password) {
         Student student = findById(studentID);
         if (student != null && student.getName().equals(name) && student.getPassword().equals(password)) {
-            System.out.println("✅ Login successful for: " + student.getName());
+            // Login successful - silent operation
             return student;
         }
         System.out.println("❌ Invalid studentID, name, or password!");

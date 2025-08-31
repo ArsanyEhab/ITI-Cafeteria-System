@@ -31,9 +31,23 @@ public class Order {
     public void addItem(MenuItem item) {
         items.add(item);
     }
+    
+    public void addItemWithQuantity(MenuItem item, int quantity) {
+        for (int i = 0; i < quantity; i++) {
+            items.add(item);
+        }
+    }
 
     public int getOrderID() { return orderID; }
+    public void setOrderID(int orderID) { this.orderID = orderID; }
+    public int getStudentId() { return studentID; }
+    public String getItemName() { 
+        if (items.isEmpty()) return "No items";
+        return items.get(0).getName(); // Return first item name for simplicity
+    }
     public double getTotalCost() { return totalCost; }
+    public double getDiscountApplied() { return discountApplied; }
+    public List<MenuItem> getItems() { return items; }
     public void setDiscountApplied(double discountApplied) { this.discountApplied = discountApplied; }
     public void setStudent(Student student) { this.student = student; }
     public Student getStudent() { return student; }

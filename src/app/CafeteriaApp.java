@@ -396,7 +396,7 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
         
         System.out.print("\nEnter Order ID: ");
         int id = sc.nextInt(); sc.nextLine();
-        System.out.print("New Status (pending/preparing/ready - case insensitive): ");
+        System.out.print("New Status (pending/preparing/ready): ");
         String status = sc.nextLine();
         
         // The error handling is now done in OrderProcessorImpl.updateOrderStatus()

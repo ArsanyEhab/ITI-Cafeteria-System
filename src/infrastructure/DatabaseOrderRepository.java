@@ -3,6 +3,7 @@ import contracts.IOrderRepository;
 import domain.MenuItem;
 import domain.Order;
 import domain.Student;
+import CrossCutting.TimeZoneConverter;
 
 import java.sql.*;
 import java.util.*;
@@ -10,6 +11,41 @@ import java.util.*;
 public class DatabaseOrderRepository implements IOrderRepository {
 
     public DatabaseOrderRepository() { }
+    
+    // Check if order_items table exists and has correct structure
+    private boolean checkOrderItemsTable() {
+        try (Connection con = DatabaseRepository.createNewConnection()) {
+            if (con == null) return false;
+            
+            // Check if table exists
+            String checkTableSql = "SHOW TABLES LIKE 'order_items'";
+            try (Statement stmt = con.createStatement();
+                 ResultSet rs = stmt.executeQuery(checkTableSql)) {
+                if (!rs.next()) {
+                    System.err.println("❌ order_items table does not exist!");
+                    return false;
+                }
+            }
+            
+            // Check table structure
+            String checkStructureSql = "DESCRIBE order_items";
+            try (Statement stmt = con.createStatement();
+                 ResultSet rs = stmt.executeQuery(checkStructureSql)) {
+                System.out.println("📋 order_items table structure:");
+                while (rs.next()) {
+                    String field = rs.getString("Field");
+                    String type = rs.getString("Type");
+                    String key = rs.getString("Key");
+                    System.out.println("  - " + field + " (" + type + ") " + key);
+                }
+            }
+            return true;
+        } catch (SQLException e) {
+            System.err.println("❌ Failed to check order_items table: " + e.getMessage());
+            return false;
+        }
+    }
+    
     // ORDER OPERATIONS
     // =================================================================
 
@@ -31,6 +67,10 @@ public class DatabaseOrderRepository implements IOrderRepository {
                         "" // Password not needed
                 );
 
+                // Convert UTC timestamp to Cairo time
+                java.util.Date utcDate = rs.getTimestamp("order_date");
+                java.util.Date cairoDate = TimeZoneConverter.convertUTCToCairoDate(utcDate);
+
                 // Create order object
                 Order order = new Order(
                         rs.getInt("order_id"),
@@ -39,7 +79,7 @@ public class DatabaseOrderRepository implements IOrderRepository {
                         rs.getDouble("discount_applied"),
                         rs.getString("status"),
                         student,
-                        rs.getTimestamp("order_date")
+                        cairoDate
                 );
 
                 // Add order items
@@ -66,6 +106,10 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 while (rs.next()) {
                     Student std = db.findById(studentId);
 
+                    // Convert UTC timestamp to Cairo time
+                    java.util.Date utcDate = rs.getTimestamp("order_date");
+                    java.util.Date cairoDate = CrossCutting.TimeZoneConverter.convertUTCToCairoDate(utcDate);
+                    
                     Order order = new Order(
                             rs.getInt("order_id"),
                             Integer.parseInt(rs.getString("student_id")),
@@ -73,7 +117,7 @@ public class DatabaseOrderRepository implements IOrderRepository {
                             rs.getDouble("discount_applied"),
                             rs.getString("status"),
                             std,
-                            rs.getTimestamp("order_date")
+                            cairoDate
                     );
 
                     // Add order items
@@ -130,7 +174,10 @@ public class DatabaseOrderRepository implements IOrderRepository {
 
     private List<MenuItem> getOrderItems(int orderId) {
         List<MenuItem> items = new ArrayList<>();
-        String sql = "SELECT m.*, oi.quantity FROM order_items oi JOIN menu_items m ON oi.menu_item_id = m.menu_item_id WHERE oi.order_id = ?";
+        String sql = "SELECT oi.menu_item_id, oi.quantity, oi.price, m.name, m.description, m.category " +
+                    "FROM order_items oi " +
+                    "JOIN menu_items m ON oi.menu_item_id = m.menu_item_id " +
+                    "WHERE oi.order_id = ?";
 
         try (Connection con = DatabaseRepository.createNewConnection();
              PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
@@ -140,6 +187,7 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 while (rs.next()) {
                     // Add each menu item according to quantity
                     for (int i = 0; i < rs.getInt("quantity"); i++) {
+                        // Create MenuItem with complete data from menu_items table
                         MenuItem item = new MenuItem(
                                 rs.getInt("menu_item_id"),
                                 rs.getString("name"),
@@ -159,39 +207,70 @@ public class DatabaseOrderRepository implements IOrderRepository {
 
     @Override
     public boolean placeOrder(Order order) {
+        // Check if order_items table exists and has correct structure
+        if (!checkOrderItemsTable()) {
+            System.err.println("❌ Cannot place order - order_items table issue");
+            return false;
+        }
+        
         try (Connection con = DatabaseRepository.createNewConnection()) {
             if (con == null) return false;
             con.setAutoCommit(false);
 
             // 1. Insert order record
-            String orderSql = "INSERT INTO orders (order_id, student_id, total_cost, discount_applied, status) " +
-                    "VALUES (?, ?, ?, ?, ?)";
+            String orderSql = "INSERT INTO orders (student_id, total_cost, discount_applied, status, order_date) " +
+                    "VALUES (?, ?, ?, ?, NOW())";
 
-            try (PreparedStatement orderStmt = con.prepareStatement(orderSql)) {
-                orderStmt.setInt(1, order.getOrderID());
-                orderStmt.setString(2, order.getStudent().getStudentID());
-                orderStmt.setDouble(3, order.getTotalCost());
-                orderStmt.setDouble(4, 0); // Default discount
-                orderStmt.setString(5, order.getStatus().toUpperCase()); // Use normalized status
+            try (PreparedStatement orderStmt = con.prepareStatement(orderSql, Statement.RETURN_GENERATED_KEYS)) {
+                orderStmt.setString(1, order.getStudent().getStudentID());
+                orderStmt.setDouble(2, order.getTotalCost());
+                orderStmt.setDouble(3, 0); // Default discount
+                orderStmt.setString(4, order.getStatus().toUpperCase()); // Use normalized status
                 orderStmt.executeUpdate();
+                
+                // Get the auto-generated order ID
+                try (ResultSet rs = orderStmt.getGeneratedKeys()) {
+                    if (rs.next()) {
+                        int generatedOrderId = rs.getInt(1);
+                        order.setOrderID(generatedOrderId);
+                    }
+                }
             }
 
-            // 2. Insert order items
-            String itemSql = "INSERT INTO order_items (order_id, menu_item_id, quantity) VALUES (?, ?, ?)";
+            // 2. Insert order items using the new schema with menu_item_id
+            String itemSql = "INSERT INTO order_items (order_id, menu_item_id, quantity, price) VALUES (?, ?, ?, ?)";
 
-            // Count item frequencies
-            Map<Integer, Integer> itemCounts = new HashMap<>();
-            for (MenuItem item : getOrderItems(order.getOrderID())) {
-                itemCounts.put(item.getId(), itemCounts.getOrDefault(item.getId(), 0) + 1);
+            // Group items by menu_item_id and sum their quantities
+            Map<Integer, Integer> itemQuantities = new HashMap<>();
+            for (MenuItem item : order.getItems()) {
+                itemQuantities.merge(item.getId(), 1, Integer::sum);
             }
 
-            // Insert each unique item with its quantity
-            for (Map.Entry<Integer, Integer> entry : itemCounts.entrySet()) {
-                try (PreparedStatement itemStmt = con.prepareStatement(itemSql)) {
-                    itemStmt.setInt(1, order.getOrderID());
-                    itemStmt.setInt(2, entry.getKey());
-                    itemStmt.setInt(3, entry.getValue());
-                    itemStmt.executeUpdate();
+            // Insert each unique item with its total quantity
+            for (Map.Entry<Integer, Integer> entry : itemQuantities.entrySet()) {
+                int menuItemId = entry.getKey();
+                int totalQuantity = entry.getValue();
+                
+                // Get the item details to get the price
+                MenuItem item = order.getItems().stream()
+                    .filter(i -> i.getId() == menuItemId)
+                    .findFirst()
+                    .orElse(null);
+                
+                if (item != null) {
+                    try (PreparedStatement itemStmt = con.prepareStatement(itemSql)) {
+                        itemStmt.setInt(1, order.getOrderID());
+                        itemStmt.setInt(2, menuItemId); // Use menu_item_id from menu_items table
+                        itemStmt.setInt(3, totalQuantity); // Use the total quantity for this item
+                        itemStmt.setDouble(4, item.getPrice()); // Use the actual item price
+                        itemStmt.executeUpdate();
+                        System.out.println("✅ Order item inserted: order_id=" + order.getOrderID() + 
+                                        ", menu_item_id=" + menuItemId + 
+                                        ", quantity=" + totalQuantity + ", price=" + item.getPrice());
+                    } catch (SQLException e) {
+                        System.err.println("❌ Failed to insert order item: " + e.getMessage());
+                        throw e; // Re-throw to trigger rollback
+                    }
                 }
             }
 
@@ -251,8 +330,8 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 }
             }
 
-            // 4. If status is "COMPLETED", add loyalty points
-            if ("COMPLETED".equalsIgnoreCase(status)) {
+            // 4. If status is "ready", add loyalty points
+            if ("ready".equalsIgnoreCase(status)) {
                 String getOrderTotalSql = "SELECT total_cost FROM orders WHERE order_id = ?";
                 try (PreparedStatement getOrderTotalStmt = con.prepareStatement(getOrderTotalSql)) {
                     getOrderTotalStmt.setInt(1, orderId);
@@ -301,7 +380,7 @@ public class DatabaseOrderRepository implements IOrderRepository {
     }
 
     public boolean applyDiscountToOrder(int orderId, double discountAmount) {
-        String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND UPPER(status) = 'PENDING'";
+        String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND status = 'pending'";
         try (Connection con = DatabaseRepository.createNewConnection();
              PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
             if (pstmt == null) return false;
@@ -423,6 +502,10 @@ public class DatabaseOrderRepository implements IOrderRepository {
                             "" // Password not needed
                     );
 
+                    // Convert UTC timestamp to Cairo time for findById method
+                    java.util.Date utcDate = rs.getTimestamp("order_date");
+                    java.util.Date cairoDate = TimeZoneConverter.convertUTCToCairoDate(utcDate);
+
                     // Create order object
                     Order order = new Order(
                             rs.getInt("order_id"),
@@ -431,7 +514,7 @@ public class DatabaseOrderRepository implements IOrderRepository {
                             rs.getDouble("discount_applied"),
                             rs.getString("status"),
                             student,
-                            rs.getTimestamp("order_date")
+                            cairoDate
                     );
 
                     // Add order items

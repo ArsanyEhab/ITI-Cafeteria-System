@@ -4,6 +4,8 @@ import contracts.ILoyaltyProgram;
 import contracts.IRewardStrategy;
 import domain.IStudent;
 
+import java.util.List;
+
 
 public class LoyaltyProgram implements ILoyaltyProgram {
     private ILoyaltyProgram loyaltyRepository;
@@ -46,4 +48,6 @@ public class LoyaltyProgram implements ILoyaltyProgram {
         }
         return 0;
     }
+
+
 }

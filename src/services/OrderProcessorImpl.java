@@ -30,7 +30,7 @@ public class OrderProcessorImpl implements IOrderProcessor {
         order.generateOrderID();             // unique ID
         student.getOrders().add(order);      // add to student history
         order.calculateTotalCost();          // compute total
-        order.setStatus("PENDING");          // Set to PENDING initially (consistent with database)
+        order.setStatus("pending");          // Set to pending initially (consistent with database)
         loyaltyProgram.awardPoints( student, order.getTotalCost()); // add points
         orderRepo.placeOrder(order);               // persist
         notificationService.sendNotification(student.getStudentID(),
@@ -92,7 +92,7 @@ public class OrderProcessorImpl implements IOrderProcessor {
     // Get all pending orders (for staff view)
     public List<Order> getPendingOrders() {
         return orderRepo.getAllOrders().stream()
-                .filter(o -> "PENDING".equalsIgnoreCase(o.getStatus()))
+                .filter(o -> "pending".equalsIgnoreCase(o.getStatus()))
                 .collect(Collectors.toList());
     }
 }
