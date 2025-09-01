@@ -20,12 +20,14 @@ import javafx.scene.control.*;
 import javafx.scene.layout.*;
 import javafx.stage.Stage;
 import services.PointsPerEGPReward;
+import services.RecommendationSystem;
 import infrastructure.DatabaseRepository;
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -33,12 +35,15 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.stream.Collectors;
 
 public class StudentDashboardView extends BorderPane {
     private final Student student;
     private final IOrderRepository orderRepo = new DatabaseOrderRepository();
     private final ILoyaltyProgram loyalty = new DatabaseLoyaltyRepository(new PointsPerEGPReward());
     private final MenuOperationsRepository menuRepo = new MenuOperationsRepository();
+    private final RecommendationSystem recommendationSystem = new RecommendationSystem();
+    private Button refreshAllButton; // Reference to refresh button for later configuration
 
 
     // Menu and cart data
@@ -47,7 +52,6 @@ public class StudentDashboardView extends BorderPane {
     private final ObservableList<Order> studentOrders = FXCollections.observableArrayList();
     
     // UI Components
-    private final ListView<MenuItem> menuList = new ListView<>(menuData);
     private final ListView<CartItem> cartList = new ListView<>(cartItems);
     private final ListView<Order> ordersList = new ListView<>(studentOrders);
     
@@ -126,9 +130,26 @@ public class StudentDashboardView extends BorderPane {
         top.setAlignment(Pos.CENTER_LEFT);
         nameLbl.setText("Name: " + student.getName());
         idLbl.setText("ID: " + student.getStudentID());
+        
+        // Right side of top bar
+        HBox topRight = new HBox(10);
+        topRight.setAlignment(Pos.CENTER_RIGHT);
+        
+        Button refreshAll = new Button("🔄 Refresh All");
+        refreshAll.setStyle("-fx-background-color: #4CAF50; -fx-text-fill: white; -fx-font-weight: bold;");
+        // Store reference to refresh button for later configuration
+        this.refreshAllButton = refreshAll;
+        
         Button logout = new Button("Logout");
         logout.setOnAction(e -> stage.getScene().setRoot(new LoginRegisterView(stage)));
-        top.getChildren().addAll(nameLbl, idLbl, logout);
+        
+        topRight.getChildren().addAll(refreshAll, logout);
+        
+        // Use BorderPane layout to put left content and right content
+        top.getChildren().addAll(nameLbl, idLbl);
+        HBox spacer = new HBox();
+        HBox.setHgrow(spacer, Priority.ALWAYS); // This pushes the right content to the right
+        top.getChildren().addAll(spacer, topRight);
         setTop(top);
 
         // Left: loyalty and cart
@@ -161,8 +182,7 @@ public class StudentDashboardView extends BorderPane {
                 });
             }).start();
         });
-        Button viewLoyalty = new Button("View Loyalty Rules");
-        viewLoyalty.setOnAction(e -> showRules());
+
         
         // Exchange points section
         VBox exchangeBox = new VBox(6);
@@ -245,7 +265,7 @@ public class StudentDashboardView extends BorderPane {
         // Load exchange rate
         loadExchangeRate(exchangeRateLbl);
         
-        loyaltyBox.getChildren().addAll(new Label("Loyalty Points"), pointsLbl, refresh, viewLoyalty, exchangeBox);
+        loyaltyBox.getChildren().addAll(new Label("Loyalty Points"), pointsLbl, refresh, exchangeBox);
         
         // Cart section
         VBox cartBox = new VBox(6);
@@ -287,7 +307,7 @@ public class StudentDashboardView extends BorderPane {
                     itemInfoBox.getChildren().add(itemInfo);
                     
                     // Quantity spinner (with built-in up/down arrows)
-                    Spinner<Integer> qtySpinner = new Spinner<>(1, 20, cartItem.getQuantity());
+                    Spinner<Integer> qtySpinner = new Spinner<>(1, 999, cartItem.getQuantity());
                     qtySpinner.setPrefWidth(60);
                     qtySpinner.setPrefHeight(25);
                     
@@ -349,28 +369,74 @@ public class StudentDashboardView extends BorderPane {
         left.getChildren().addAll(loyaltyBox, cartBox);
         setLeft(left);
 
-        // Center: menu
+        // Center: menu with category grouping
         loadMenu();
-        menuList.setCellFactory(list -> new ListCell<>() {
-            @Override protected void updateItem(MenuItem item, boolean empty) {
-                super.updateItem(item, empty);
-                if (empty || item == null) setText(null);
-                else setText(item.getName() + " - " + (int)item.getPrice() + " EGP - " + item.getCategory());
-            }
-        });
-        menuList.setPrefWidth(450);
         
-        VBox center = new VBox(10);
-        center.getStyleClass().add("card");
-        center.setPadding(new Insets(12));
-        
-        // Menu controls
+        // Create menu controls first (so they can be referenced in the TreeView listener)
         HBox menuControls = new HBox(10);
-        Spinner<Integer> qty = new Spinner<>(1, 10, 1);
+        Spinner<Integer> qty = new Spinner<>(1, 999, 1);
         Button addToCart = new Button("Add to Cart");
-        addToCart.setOnAction(e -> addToCart(menuList.getSelectionModel().getSelectedItem(), qty.getValue()));
+        addToCart.setDisable(true); // Disabled until item is selected
         menuControls.getChildren().addAll(new Label("Quantity:"), qty, addToCart);
         menuControls.setAlignment(Pos.CENTER_LEFT);
+        
+        // Create TreeView for category grouping with optimized performance
+        TreeView<String> menuTree = new TreeView<>();
+        menuTree.setPrefWidth(450);
+        menuTree.setPrefHeight(400);
+        menuTree.setShowRoot(false);
+        menuTree.setFixedCellSize(25); // Fixed cell size for better performance
+        
+        // Build category tree with lazy loading
+        TreeItem<String> root = new TreeItem<>();
+        
+        // Group menu items by category
+        Map<String, List<MenuItem>> menuByCategory = menuData.stream()
+            .collect(Collectors.<MenuItem, String>groupingBy(MenuItem::getCategory));
+        
+        // Create category nodes with optimized structure
+        for (Map.Entry<String, List<MenuItem>> entry : menuByCategory.entrySet()) {
+            String category = entry.getKey();
+            List<MenuItem> items = entry.getValue();
+            
+            TreeItem<String> categoryNode = new TreeItem<>(category);
+            categoryNode.setExpanded(true);
+            
+            // Add items under category with optimized creation
+            for (MenuItem item : items) {
+                TreeItem<String> itemNode = new TreeItem<>(item.getName() + " - " + (int)item.getPrice() + " EGP");
+                categoryNode.getChildren().add(itemNode);
+            }
+            
+            root.getChildren().add(categoryNode);
+        }
+        
+        menuTree.setRoot(root);
+        
+        // Handle item selection
+        menuTree.getSelectionModel().selectedItemProperty().addListener((obs, oldSelection, newSelection) -> {
+            if (newSelection != null && newSelection.isLeaf() && newSelection.getParent() != root) {
+                // Find the selected MenuItem
+                String selectedText = newSelection.getValue();
+                String itemName = selectedText.split(" - ")[0];
+                
+                MenuItem selectedItem = menuData.stream()
+                    .filter(item -> item.getName().equals(itemName))
+                    .findFirst()
+                    .orElse(null);
+                
+                if (selectedItem != null) {
+                    // Update quantity spinner and enable add to cart
+                    qty.setValueFactory(new SpinnerValueFactory.IntegerSpinnerValueFactory(1, 999, 1));
+                    addToCart.setDisable(false);
+                    addToCart.setOnAction(e -> addToCart(selectedItem, qty.getValue()));
+                }
+            }
+        });
+        
+        VBox center = new VBox(10);
+        center.getStyleClass().add("Card");
+        center.setPadding(new Insets(12));
         
         // Loyalty redemption section
         VBox loyaltyRedemptionBox = new VBox(6);
@@ -392,7 +458,7 @@ public class StudentDashboardView extends BorderPane {
                     HBox rewardRow = new HBox(10);
                     rewardRow.setAlignment(Pos.CENTER_LEFT);
                     
-                    Label rewardInfo = new Label(reward.toString());
+                    Label rewardInfo = new Label(reward.getRewardName() + " (" + reward.getPointsRequired() + " pts)");
                     rewardInfo.setPrefWidth(200);
                     
                     Button redeemBtn = new Button("Redeem");
@@ -411,7 +477,10 @@ public class StudentDashboardView extends BorderPane {
         
         loyaltyRedemptionBox.getChildren().addAll(rewardsList);
         
-        center.getChildren().addAll(new Label("Menu & Loyalty"), menuList, menuControls, loyaltyRedemptionBox);
+        // Recommendations section
+        VBox recommendationsBox = createRecommendationsSection();
+        
+        center.getChildren().addAll(new Label("Menu & Loyalty"), menuTree, menuControls, loyaltyRedemptionBox, recommendationsBox);
         setCenter(center);
 
         // Right: orders and order details
@@ -442,11 +511,12 @@ public class StudentDashboardView extends BorderPane {
                         default -> "⚪";
                     };
                     
-                    // Show Cairo time for the order
-                    String cairoTime = CrossCutting.TimeZoneConverter.formatInCairoTimeZone(order.getDate(), "dd/MM HH:mm");
+                    // Show local time for the order
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd/MM HH:mm");
+                    String localTime = sdf.format(order.getDate());
                     
                     setText(statusColor + " #" + order.getOrderID() + " - " + 
-                           (int)order.getTotalCost() + " EGP - " + status + " - " + cairoTime);
+                           (int)order.getTotalCost() + " EGP - " + status + " - " + localTime);
                 }
             }
         });
@@ -460,7 +530,7 @@ public class StudentDashboardView extends BorderPane {
         });
         
         // Add timezone info
-        Label timezoneInfo = new Label(CrossCutting.TimeZoneConverter.getCairoTimeZoneInfo());
+        Label timezoneInfo = new Label("Local Time");
         timezoneInfo.setStyle("-fx-font-size: 10px; -fx-text-fill: #666; -fx-font-style: italic;");
         
         // Points History button
@@ -513,9 +583,9 @@ public class StudentDashboardView extends BorderPane {
                     message.setWrapText(true);
                     message.setMaxWidth(200);
                     
-                    String cairoTime = CrossCutting.TimeZoneConverter.formatInCairoTimeZone(
-                        (java.util.Date) notification.get("created_at"), "dd/MM HH:mm");
-                    Label time = new Label(cairoTime);
+                    SimpleDateFormat sdf = new SimpleDateFormat("dd/MM HH:mm");
+                    String localTime = sdf.format((java.util.Date) notification.get("created_at"));
+                    Label time = new Label(localTime);
                     time.setStyle("-fx-font-size: 10px; -fx-text-fill: #666;");
                     
                     notificationContent.getChildren().addAll(message, time);
@@ -542,17 +612,13 @@ public class StudentDashboardView extends BorderPane {
         refreshNotifications.setStyle("-fx-font-size: 11px;");
         refreshNotifications.setOnAction(e -> loadNotifications());
         
-        // ✅ Test button for new notification alerts
-        Button testAlertBtn = new Button("🧪 Test Alert");
-        testAlertBtn.setStyle("-fx-font-size: 11px; -fx-background-color: #FF9800; -fx-text-fill: white;");
-        testAlertBtn.setOnAction(e -> {
-            showNewNotificationAlert(3, "🧪 This is a test notification message!"); // Test with 3 new notifications
-        });
-        
         HBox notificationButtons = new HBox(8);
-        notificationButtons.getChildren().addAll(refreshNotifications, testAlertBtn);
+        notificationButtons.getChildren().addAll(refreshNotifications);
         
         notificationsBox.getChildren().addAll(notificationsHeader, notificationsList, notificationButtons);
+        
+        // Configure refresh button after variables are declared
+        configureRefreshButton();
         
         ordersBox.getChildren().addAll(new Label("My Orders"), timezoneInfo, refreshOrders, pointsHistoryBtn, notificationsBox, ordersList);
         
@@ -629,6 +695,49 @@ public class StudentDashboardView extends BorderPane {
                 new MenuItem(12,"Fresh Juice","",120,"Drink")
             ));
         }
+        
+        // Refresh the menu tree if it exists
+        Platform.runLater(() -> {
+            if (getCenter() != null && getCenter() instanceof VBox) {
+                VBox center = (VBox) getCenter();
+                for (Node node : center.getChildren()) {
+                    if (node instanceof TreeView) {
+                        refreshMenuTree((TreeView<String>) node);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+    
+    private void refreshMenuTree(TreeView<String> menuTree) {
+        if (menuTree == null) return;
+        
+        // Clear existing tree
+        TreeItem<String> root = new TreeItem<>();
+        
+        // Group menu items by category
+        Map<String, List<MenuItem>> menuByCategory = menuData.stream()
+            .collect(Collectors.<MenuItem, String>groupingBy(MenuItem::getCategory));
+        
+        // Create category nodes with optimized structure
+        for (Map.Entry<String, List<MenuItem>> entry : menuByCategory.entrySet()) {
+            String category = entry.getKey();
+            List<MenuItem> items = entry.getValue();
+            
+            TreeItem<String> categoryNode = new TreeItem<>(category);
+            categoryNode.setExpanded(true);
+            
+            // Add items under category with optimized creation
+            for (MenuItem item : items) {
+                TreeItem<String> itemNode = new TreeItem<>(item.getName() + " - " + (int)item.getPrice() + " EGP");
+                categoryNode.getChildren().add(itemNode);
+            }
+            
+            root.getChildren().add(categoryNode);
+        }
+        
+        menuTree.setRoot(root);
     }
 
     private void addToCart(MenuItem item, int quantity) {
@@ -803,7 +912,7 @@ public class StudentDashboardView extends BorderPane {
         // Create order with discount using Cairo time
         Order order = new Order(
             0, // orderID will be auto-generated by database
-            Integer.parseInt(student.getStudentID()), 
+            student.getStudentID(),
             totalCost, // Original total cost
             currentOrderDiscount, // Applied discount
             "pending", 
@@ -825,6 +934,9 @@ public class StudentDashboardView extends BorderPane {
             return;
         }
         
+        // Update recommendation system with the new order
+        recommendationSystem.updateFromOrder(order);
+        
 
         
         // Show order confirmation
@@ -833,7 +945,8 @@ public class StudentDashboardView extends BorderPane {
         bill.append("Name: ").append(student.getName()).append("\n");
         bill.append("ID: ").append(student.getStudentID()).append("\n");
         bill.append("Order #: ").append(order.getOrderID()).append("\n");
-        bill.append("Date: ").append(CrossCutting.TimeZoneConverter.convertUTCToCairo(order.getDate())).append(" (Cairo Time)\n\n");
+        SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+        bill.append("Date: ").append(sdf.format(order.getDate())).append("\n\n");
         bill.append("Items:\n");
         
         for (CartItem cartItem : cartItems) {
@@ -872,7 +985,7 @@ public class StudentDashboardView extends BorderPane {
         
         // Filter orders for this student
         for (Order order : allOrders) {
-            if (order.getStudentId() == Integer.parseInt(student.getStudentID())) {
+            if (Integer.parseInt(order.getStudentId()) == Integer.parseInt(student.getStudentID())) {
                 studentOrders.add(order);
             }
         }
@@ -888,21 +1001,24 @@ public class StudentDashboardView extends BorderPane {
         // Get fresh points from database and update student object
         try {
             // Create a new connection to get fresh data
-            Connection con = DatabaseRepository.createNewConnection();
+            Connection con = DatabaseRepository.getConnection();
             if (con != null) {
-                String sql = "SELECT loyalty_points FROM students WHERE student_id = ?";
-                try (PreparedStatement pstmt = con.prepareStatement(sql)) {
-                    pstmt.setString(1, student.getStudentID());
-                    try (ResultSet rs = pstmt.executeQuery()) {
-                        if (rs.next()) {
-                            int freshPoints = rs.getInt("loyalty_points");
-                            student.setLoyaltyPoints(freshPoints);
-                            pointsLbl.setText("Points: " + freshPoints);
-                            System.out.println("✅ Loyalty points refreshed from database: " + freshPoints);
+                try {
+                    String sql = "SELECT loyalty_points FROM students WHERE student_id = ?";
+                    try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                        pstmt.setString(1, student.getStudentID());
+                        try (ResultSet rs = pstmt.executeQuery()) {
+                            if (rs.next()) {
+                                int freshPoints = rs.getInt("loyalty_points");
+                                student.setLoyaltyPoints(freshPoints);
+                                pointsLbl.setText("Points: " + freshPoints);
+
+                            }
                         }
                     }
+                } finally {
+                    DatabaseRepository.returnConnection(con);
                 }
-                con.close();
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to refresh loyalty points: " + e.getMessage());
@@ -951,11 +1067,7 @@ public class StudentDashboardView extends BorderPane {
             return;
         }
         
-        // Debug: Print reward details
-        System.out.println("🔍 Debug: Redeeming reward - ID: " + reward.getRewardId() + 
-                          ", Name: " + reward.getRewardName() + 
-                          ", Points: " + reward.getPointsRequired() + 
-                          ", Item ID: " + reward.getRewardedItemId());
+
         
         // Get the actual menu item for this reward
         DatabaseLoyaltyRepository loyaltyRepo = (DatabaseLoyaltyRepository) loyalty;
@@ -969,10 +1081,7 @@ public class StudentDashboardView extends BorderPane {
             return;
         }
         
-        // Debug: Print menu item details
-        System.out.println("🔍 Debug: Found menu item - ID: " + rewardedItem.getId() + 
-                          ", Name: " + rewardedItem.getName() + 
-                          ", Price: " + rewardedItem.getPrice());
+
         
         // ✅ CHECK CART AVAILABILITY BEFORE DEDUCTING POINTS
         
@@ -1070,7 +1179,7 @@ public class StudentDashboardView extends BorderPane {
         // Order details
         VBox details = new VBox(6);
         details.getChildren().addAll(
-            new Label("Date: " + CrossCutting.TimeZoneConverter.convertUTCToCairo(order.getDate())),
+            new Label("Date: " + new SimpleDateFormat("dd/MM/yyyy HH:mm:ss").format(order.getDate())),
             new Label("Total Cost: " + (int)order.getTotalCost() + " EGP"),
             new Label("Discount Applied: " + (int)order.getDiscountApplied() + " EGP"),
             new Label("Final Cost: " + (int)(order.getTotalCost() - order.getDiscountApplied()) + " EGP")
@@ -1153,6 +1262,194 @@ public class StudentDashboardView extends BorderPane {
         }
     }
 
+    private VBox createRecommendationsSection() {
+        VBox recommendationsBox = new VBox(8);
+        recommendationsBox.getStyleClass().add("card");
+        recommendationsBox.setPadding(new Insets(8));
+        
+        Label recommendationsTitle = new Label("🎯 Personalized Recommendations");
+        recommendationsTitle.setStyle("-fx-font-weight: bold; -fx-text-fill: #1976D2;");
+        
+        ListView<MenuItem> recommendationsList = new ListView<>();
+        recommendationsList.setPrefHeight(100);
+        recommendationsList.setCellFactory(list -> new ListCell<MenuItem>() {
+            @Override
+            protected void updateItem(MenuItem item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText("⭐ " + item.getName() + " - " + String.format("%.0f", item.getPrice()) + " EGP");
+                }
+            }
+        });
+        
+        // Add click listener to add recommended item to cart
+        recommendationsList.setOnMouseClicked(e -> {
+            MenuItem selectedItem = recommendationsList.getSelectionModel().getSelectedItem();
+            if (selectedItem != null) {
+                addToCart(selectedItem, 1);
+                alert("✅ Added " + selectedItem.getName() + " to cart!");
+            }
+        });
+        
+        Button refreshRecommendations = new Button("🔄 Refresh");
+        refreshRecommendations.setStyle("-fx-font-size: 11px;");
+        refreshRecommendations.setOnAction(e -> loadRecommendations(recommendationsList));
+        
+        Button addAllRecommendations = new Button("📦 Add All");
+        addAllRecommendations.setStyle("-fx-font-size: 11px; -fx-background-color: #4CAF50; -fx-text-fill: white;");
+        addAllRecommendations.setOnAction(e -> {
+            List<MenuItem> recommendations = new ArrayList<>();
+            for (int i = 0; i < recommendationsList.getItems().size(); i++) {
+                recommendations.add(recommendationsList.getItems().get(i));
+            }
+            
+            if (!recommendations.isEmpty()) {
+                for (MenuItem item : recommendations) {
+                    addToCart(item, 1);
+                }
+                alert("✅ Added all " + recommendations.size() + " recommended items to cart!");
+            }
+        });
+        
+        HBox recommendationButtons = new HBox(8);
+        recommendationButtons.getChildren().addAll(refreshRecommendations, addAllRecommendations);
+        
+        recommendationsBox.getChildren().addAll(recommendationsTitle, recommendationsList, recommendationButtons);
+        
+        // Load initial recommendations
+        loadRecommendations(recommendationsList);
+        
+        return recommendationsBox;
+    }
+    
+    private void configureRefreshButton() {
+        if (refreshAllButton != null) {
+            refreshAllButton.setOnAction(e -> {
+                refreshAllButton.setDisable(true);
+                refreshAllButton.setText("🔄 Refreshing...");
+                
+                // Refresh all data
+                refreshStudentPointsFromDatabase();
+                loadMenu();
+                loadStudentOrders();
+                
+                // Find the rewards list and exchange rate label
+                ListView<Reward> rewardsList = findRewardsList();
+                Label exchangeRateLbl = findExchangeRateLabel();
+                
+                if (rewardsList != null) {
+                    loadRewards(rewardsList);
+                }
+                if (exchangeRateLbl != null) {
+                    loadExchangeRate(exchangeRateLbl);
+                }
+                
+                // Refresh recommendations in center area
+                refreshRecommendationsInCenter();
+                
+                // Re-enable button after a short delay
+                new Thread(() -> {
+                    try {
+                        Thread.sleep(1500);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                    }
+                    Platform.runLater(() -> {
+                        refreshAllButton.setDisable(false);
+                        refreshAllButton.setText("🔄 Refresh All");
+                    });
+                }).start();
+            });
+        }
+    }
+    
+    private ListView<Reward> findRewardsList() {
+        // Search for rewards list in the center area
+        if (getCenter() != null && getCenter() instanceof VBox) {
+            VBox center = (VBox) getCenter();
+            for (Node node : center.getChildren()) {
+                if (node instanceof VBox) {
+                    VBox vbox = (VBox) node;
+                    for (Node child : vbox.getChildren()) {
+                        if (child instanceof ListView) {
+                            ListView<?> listView = (ListView<?>) child;
+                            if (listView.getItems().size() > 0 && listView.getItems().get(0) instanceof Reward) {
+                                return (ListView<Reward>) listView;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    private Label findExchangeRateLabel() {
+        // Search for exchange rate label in the UI
+        if (getLeft() != null && getLeft() instanceof VBox) {
+            VBox left = (VBox) getLeft();
+            for (Node node : left.getChildren()) {
+                if (node instanceof VBox) {
+                    VBox vbox = (VBox) node;
+                    for (Node child : vbox.getChildren()) {
+                        if (child instanceof Label) {
+                            Label label = (Label) child;
+                            if (label.getText() != null && label.getText().contains("Exchange Rate")) {
+                                return label;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        return null;
+    }
+    
+    private void refreshRecommendationsInCenter() {
+        // Find and refresh recommendations in the center area
+        if (getCenter() != null && getCenter() instanceof VBox) {
+            VBox center = (VBox) getCenter();
+            for (Node node : center.getChildren()) {
+                if (node instanceof VBox) {
+                    VBox vbox = (VBox) node;
+                    for (Node child : vbox.getChildren()) {
+                        if (child instanceof ListView) {
+                            ListView<?> listView = (ListView<?>) child;
+                            if (listView.getItems().size() > 0 && listView.getItems().get(0) instanceof MenuItem) {
+                                // Found recommendations list, refresh it
+                                loadRecommendations((ListView<MenuItem>) listView);
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    private void loadRecommendations(ListView<MenuItem> recommendationsList) {
+        try {
+            List<MenuItem> allMenuItems = menuRepo.getMenu();
+            List<MenuItem> personalizedRecommendations = recommendationSystem.getPersonalizedRecommendations(
+                student.getStudentID(), allMenuItems, 5);
+            
+            recommendationsList.getItems().clear();
+            recommendationsList.getItems().addAll(personalizedRecommendations);
+            
+            if (personalizedRecommendations.isEmpty()) {
+                // Fallback to general recommendations
+                List<MenuItem> generalRecommendations = recommendationSystem.getTopRecommendations(allMenuItems, 5);
+                recommendationsList.getItems().addAll(generalRecommendations);
+            }
+            
+        } catch (Exception e) {
+            System.err.println("❌ Failed to load recommendations: " + e.getMessage());
+            alert("Unable to load recommendations at this time.");
+        }
+    }
+    
     private void showPointsHistory() {
         try {
             DatabaseLoyaltyRepository loyaltyRepo = (DatabaseLoyaltyRepository) loyalty;
@@ -1171,11 +1468,12 @@ public class StudentDashboardView extends BorderPane {
             
             for (domain.LoyaltyTransaction transaction : transactions) {
                 String sign = transaction.getPointsChanged() >= 0 ? "+" : "";
-                String cairoTime = CrossCutting.TimeZoneConverter.convertUTCToCairo(transaction.getCreatedAt());
+                SimpleDateFormat sdf = new SimpleDateFormat("dd/MM/yyyy HH:mm:ss");
+                String localTime = sdf.format(transaction.getCreatedAt());
                 
                 history.append("• ").append(sign).append(transaction.getPointsChanged()).append(" points\n");
                 history.append("  ").append(transaction.getDescription()).append("\n");
-                history.append("  ").append(cairoTime).append(" (Cairo Time)\n\n");
+                history.append("  ").append(localTime).append("\n\n");
             }
             
             alert(history.toString());
@@ -1315,30 +1613,7 @@ public class StudentDashboardView extends BorderPane {
         });
     }
 
-    private void showRules() {
-        try {
-            DatabaseLoyaltyRepository loyaltyRepo = (DatabaseLoyaltyRepository) loyalty;
-            List<Reward> availableRewards = loyaltyRepo.getAllRewards();
-            
-            StringBuilder rules = new StringBuilder();
-            rules.append("Loyalty Rules:\n\n");
-            
-            for (Reward reward : availableRewards) {
-                if ("discount".equalsIgnoreCase(reward.getRewardName())) {
-                    rules.append("• ").append(reward.getPointsRequired()).append(" points → ").append(reward.getRewardedItemId()).append(" discount\n");
-                    rules.append("• ").append(reward.getPointsRequired()).append(" points → Item ID: ").append(reward.getRewardedItemId()).append("\n");
-                } else {
-                    rules.append("• ").append(reward.getPointsRequired()).append(" points → Item ID: ").append(reward.getRewardedItemId()).append("\n");
-                }
-            }
-            
-            rules.append("\nNote: Discount redemption automatically calculates the maximum discount you can get with your current points!");
-            
-            alert(rules.toString());
-        } catch (Exception e) {
-            alert("Loyalty Rules:\n- Every 50 points → 10 EGP discount\n- 100 points → Free Coffee\n- 1 coin per 10 points\n\nNote: Discount redemption automatically calculates the maximum discount you can get with your current points!");
-        }
-    }
+
 
     private void alert(String m) { 
         new Alert(Alert.AlertType.INFORMATION, m).showAndWait(); 

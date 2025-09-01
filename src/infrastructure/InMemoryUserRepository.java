@@ -23,4 +23,9 @@ public class InMemoryUserRepository implements IUserRepository {
     public void save(Student student) {
         databaseUserRepository.save(student);
     }
+    
+    @Override
+    public boolean verifyPassword(String studentId, String password) {
+        return databaseUserRepository.verifyPassword(studentId, password);
+    }
 }

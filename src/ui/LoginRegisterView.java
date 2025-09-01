@@ -5,6 +5,7 @@ import infrastructure.DatabaseStaffRepository;
 import domain.Student;
 import domain.Staff;
 import domain.IStudent;
+import utils.PasswordEncryption;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.control.*;
@@ -29,7 +30,7 @@ public class LoginRegisterView extends BorderPane {
     private void setupStudentView(Stage stage) {
         VBox card = new VBox(14);
         card.getStyleClass().add("card");
-        card.setAlignment(Pos.CENTER_LEFT);
+        card.setAlignment(Pos.CENTER);
 
         Label title = new Label("Student Portal");
         title.getStyleClass().add("title");
@@ -53,13 +54,26 @@ public class LoginRegisterView extends BorderPane {
 
         GridPane form = new GridPane();
         form.setHgap(10); form.setVgap(10);
-        form.addRow(0, new Label("Authentication:"), authRow);
-        form.addRow(1, new Label("Student ID:"), idField);
-        form.addRow(2, new Label("Password:"), passField);
-        form.addRow(3, new Label("Name:"), nameField);
+        form.setAlignment(Pos.CENTER);
+        
+        // Create labels that will be shown/hidden based on register mode
+        Label authLabel = new Label("Authentication:");
+        Label idLabel = new Label("Student ID:");
+        Label passLabel = new Label("Password:");
+        Label nameLabel = new Label("Name:");
+        
+        // Hide name label during login
+        nameLabel.managedProperty().bind(register.selectedProperty());
+        nameLabel.visibleProperty().bind(register.selectedProperty());
+        
+        form.addRow(0, authLabel, authRow);
+        form.addRow(1, idLabel, idField);
+        form.addRow(2, passLabel, passField);
+        form.addRow(3, nameLabel, nameField);
 
         VBox wrap = new VBox(16, title, form, submit);
         wrap.setPadding(new Insets(8));
+        wrap.setAlignment(Pos.CENTER);
 
         // Add staff button at the bottom
         Button staffButton = new Button("Staff/Admin Login");
@@ -75,7 +89,7 @@ public class LoginRegisterView extends BorderPane {
     private void setupStaffView(Stage stage) {
         VBox card = new VBox(14);
         card.getStyleClass().add("card");
-        card.setAlignment(Pos.CENTER_LEFT);
+        card.setAlignment(Pos.CENTER);
 
         Label title = new Label("Staff Portal");
         title.getStyleClass().add("title");
@@ -105,14 +119,30 @@ public class LoginRegisterView extends BorderPane {
 
         GridPane form = new GridPane();
         form.setHgap(10); form.setVgap(10);
-        form.addRow(0, new Label("Authentication:"), authRow);
-        form.addRow(1, new Label("Role:"), roleBox);
-        form.addRow(2, new Label("Staff ID:"), idField);
-        form.addRow(3, new Label("Password:"), passField);
-        form.addRow(4, new Label("Name:"), nameField);
+        form.setAlignment(Pos.CENTER);
+        
+        // Create labels that will be shown/hidden based on register mode
+        Label authLabel = new Label("Authentication:");
+        Label roleLabel = new Label("Role:");
+        Label idLabel = new Label("Staff ID:");
+        Label passLabel = new Label("Password:");
+        Label nameLabel = new Label("Name:");
+        
+        // Hide role and name labels during login
+        roleLabel.managedProperty().bind(register.selectedProperty());
+        roleLabel.visibleProperty().bind(register.selectedProperty());
+        nameLabel.managedProperty().bind(register.selectedProperty());
+        nameLabel.visibleProperty().bind(register.selectedProperty());
+        
+        form.addRow(0, authLabel, authRow);
+        form.addRow(1, roleLabel, roleBox);
+        form.addRow(2, idLabel, idField);
+        form.addRow(3, passLabel, passField);
+        form.addRow(4, nameLabel, nameField);
 
         VBox wrap = new VBox(16, title, form, submit);
         wrap.setPadding(new Insets(8));
+        wrap.setAlignment(Pos.CENTER);
 
         // Add back to student button at the bottom
         Button studentButton = new Button("Back to Student Portal");
@@ -142,20 +172,27 @@ public class LoginRegisterView extends BorderPane {
         if (isRegister) {
             Student existing = userRepo.findById(id);
             if (existing != null) { show("You are already registered."); return; }
+            
+            // Validate password security
+            if (!utils.PasswordEncryption.isPasswordSecure(pass)) {
+                show("❌ Password must be at least 6 characters and contain both letters and numbers!");
+                return;
+            }
+            
             Student s = new Student(nameField.getText().trim(), id, pass);
             userRepo.save(s);
-            show("Registered successfully.");
+            show("✅ Registered successfully.");
         } else {
-            // For login, we need to get the student first to retrieve the name
+            // For login, verify password using the new secure method
             Student existing = userRepo.findById(id);
             if (existing == null) { show("Student not found."); return; }
-            // Fixed: login method expects 3 parameters: studentID, name, password
-            IStudent studentInterface = userRepo.login(id, existing.getName(), pass);
-            if (studentInterface == null) { show("Invalid credentials."); return; }
-            // Cast IStudent to Student since we know it's a Student instance
-            Student s = (Student) studentInterface;
-            StudentDashboardView view = new StudentDashboardView(stage, s);
-            stage.getScene().setRoot(view);
+            
+            if (userRepo.verifyPassword(id, pass)) {
+                StudentDashboardView view = new StudentDashboardView(stage, existing);
+                stage.getScene().setRoot(view);
+            } else {
+                show("Invalid credentials.");
+            }
         }
     }
 
@@ -175,9 +212,16 @@ public class LoginRegisterView extends BorderPane {
         
         if (isRegister) {
             if (staffRepo.findById(id) != null) { show("You are already registered."); return; }
+            
+            // Validate password security
+            if (!utils.PasswordEncryption.isPasswordSecure(pass)) {
+                show("❌ Password must be at least 6 characters and contain both letters and numbers!");
+                return;
+            }
+            
             boolean ok = staffRepo.registerStaff(id, nameField.getText().trim(), pass, asAdmin);
             if (!ok) { show("Registration failed."); return; }
-            show("Registered successfully.");
+            show("✅ Registered successfully.");
         } else {
             Staff s = staffRepo.login(id, pass);
             if (s == null) { show("Invalid credentials."); return; }

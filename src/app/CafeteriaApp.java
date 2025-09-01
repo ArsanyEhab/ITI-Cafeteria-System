@@ -26,7 +26,7 @@ public class CafeteriaApp {
     private static MenuManager menuManager = new MenuManager();
     private static MenuProvider menuProvider = new MenuProvider(menuManager.getItems());
     private static IStaffRepository staffRepo = new DatabaseStaffRepository();
-    private static IReportGenerator reportGenerator = new ReportGeneratorImpl(orderRepo, loyaltyProgram);
+    private static IReportGenerator reportGenerator = new ReportGeneratorImpl();
 
     private static OrderProcessorImpl orderProcessor =
             new OrderProcessorImpl(orderRepo, loyaltyProgram, notificationService, discountCalculator);
@@ -83,12 +83,20 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
         String name = sc.nextLine();
         System.out.print("Enter ID: ");
         String id = sc.nextLine();
-        System.out.print("Enter password: ");
-        String pass = sc.nextLine();
+        
+        String pass;
+        do {
+            System.out.print("Enter password (min 6 chars, must contain letters and numbers): ");
+            pass = sc.nextLine();
+            
+            if (!utils.PasswordEncryption.isPasswordSecure(pass)) {
+                System.out.println("❌ Password must be at least 6 characters and contain both letters and numbers!");
+            }
+        } while (!utils.PasswordEncryption.isPasswordSecure(pass));
 
         Student s = new Student(name, id, pass);
         userRepo.save(s);
-        System.out.println("Student registered successfully!");
+        System.out.println("✅ Student registered successfully!");
         System.out.println("Login for Service");
     }
 
@@ -99,16 +107,14 @@ private static IPaymentInterface paymentInterface=new PaymentTech();
         String pass = sc.nextLine();
 
         Student s = userRepo.findById(id);
-        if (s != null && s.getPassword().equals(pass)) {
+        if (s != null && userRepo.verifyPassword(id, pass)) {
             currentStudent = s;
             System.out.println("Welcome, " + s.getName());
             afterLogin();
         }
-
         else {
             System.out.println("Invalid credentials!");
         }
-
     }
     public static void afterLogin() {
         while (true) {

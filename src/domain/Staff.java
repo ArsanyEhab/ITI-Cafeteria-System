@@ -23,5 +23,11 @@ public class Staff implements IUser {
     public String getPassword() { return password; }
 
     public boolean isAdmin() { return isAdmin; }
+    
+    public void setName(String name) { this.name = name; }
+    
+    public void setRole(boolean isAdmin) { this.isAdmin = isAdmin; }
+    
+    public String getRole() { return isAdmin ? "admin" : "staff"; }
 }
 

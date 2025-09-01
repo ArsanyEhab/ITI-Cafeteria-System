@@ -28,6 +28,8 @@ public class Student implements IStudent, IUser {
     public String getPassword(){return password;}
     public int getLoyaltyPoints() { return loyaltyPoints; }
     public void setLoyaltyPoints(int loyaltyPoints) { this.loyaltyPoints = loyaltyPoints; }
+    
+    public void setName(String name) { this.name = name; }
     public List<Order> getOrders() { return orders; }
     public void viewProfile() {
         System.out.println("Name: " + name + ", ID: " + studentID);

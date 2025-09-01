@@ -76,8 +76,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         String sql = "SELECT m.* FROM menu_items m " +
                     "JOIN rewards r ON m.menu_item_id = r.rewarded_item_id " +
                     "WHERE r.reward_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return null;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setInt(1, rewardId);
@@ -96,7 +97,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get rewarded menu item: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return null;
     }
@@ -126,16 +127,23 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
     private void recordLoyaltyTransaction(String studentId, int pointsChanged, String description) {
         String sql = "INSERT INTO loyalty_transactions (student_id, points_changed, description, created_at) VALUES (?, ?, ?, NOW())";
         
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, studentId);
-            pstmt.setInt(2, pointsChanged);
-            pstmt.setString(3, description);
-            pstmt.executeUpdate();
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return;
             
-            System.out.println("✅ Loyalty transaction recorded: " + description + " for student " + studentId);
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, studentId);
+                pstmt.setInt(2, pointsChanged);
+                pstmt.setString(3, description);
+                pstmt.executeUpdate();
+                
+                System.out.println("✅ Loyalty transaction recorded: " + description + " for student " + studentId);
+            }
         } catch (SQLException e) {
             System.err.println("❌ Failed to record loyalty transaction: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
     }
     
@@ -146,31 +154,39 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         List<LoyaltyTransaction> transactions = new ArrayList<>();
         String sql = "SELECT * FROM loyalty_transactions WHERE student_id = ? ORDER BY created_at DESC";
         
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, studentId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    LoyaltyTransaction transaction = new LoyaltyTransaction(
-                        rs.getInt("transaction_id"),
-                        rs.getString("student_id"),
-                        rs.getInt("points_changed"),
-                        rs.getString("description"),
-                        rs.getTimestamp("created_at")
-                    );
-                    transactions.add(transaction);
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return transactions;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, studentId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        LoyaltyTransaction transaction = new LoyaltyTransaction(
+                            rs.getInt("transaction_id"),
+                            rs.getString("student_id"),
+                            rs.getInt("points_changed"),
+                            rs.getString("description"),
+                            rs.getTimestamp("created_at")
+                        );
+                        transactions.add(transaction);
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to get loyalty transaction history: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return transactions;
     }
 
     private void updateStudentPoints(IStudent student) {
         String sql = "UPDATE students SET loyalty_points = ? WHERE student_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setInt(1, student.getLoyaltyPoints());
@@ -180,14 +196,15 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to update student points: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
     }
 
     private void recordRedemption(String studentId, int rewardId) {
         String sql = "INSERT INTO student_rewards (student_id, reward_id, redeemed_at) VALUES (?, ?, NOW())";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -197,14 +214,15 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to record redemption: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
     }
 
     public int getTotalRedeemedPoints() {
         String sql = "SELECT COUNT(*) as total FROM student_rewards";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 0;
             try (Statement stmt = con.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
@@ -215,7 +233,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get total redeemed points: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return 0;
     }
@@ -223,8 +241,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
     // Additional methods for loyalty program management
     public int getStudentTotalRedemptions(String studentId) {
         String sql = "SELECT COUNT(*) as total FROM student_rewards WHERE student_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 0;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -237,7 +256,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get student redemptions: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return 0;
     }
@@ -247,8 +266,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
      */
     private Reward getRewardByName(String rewardName) {
         String sql = "SELECT * FROM rewards WHERE reward_name = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return null;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, rewardName);
@@ -266,7 +286,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get reward details: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return null;
     }
@@ -277,8 +297,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
     public List<Reward> getAllRewards() {
         List<Reward> rewards = new ArrayList<>();
         String sql = "SELECT * FROM rewards ORDER BY points_required ASC";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return rewards;
             try (Statement stmt = con.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
@@ -295,7 +316,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get all rewards: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return rewards;
     }
@@ -304,7 +325,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
      * Get a database connection for external use
      */
     public Connection getConnection() {
-        return DatabaseRepository.createNewConnection();
+        return DatabaseRepository.getConnection();
     }
     
 
@@ -314,8 +335,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
      */
     public int getExchangeRate() {
         String sql = "SELECT points_per_egp FROM exchange_points ORDER BY last_updated DESC LIMIT 1";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 50; // Default fallback
             try (Statement stmt = con.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
@@ -326,7 +348,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get exchange rate: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return 50; // Default fallback
     }
@@ -336,8 +358,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
      */
     public double getEGPPerPoint() {
         String sql = "SELECT egp_per_points FROM exchange_points ORDER BY last_updated DESC LIMIT 1";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 0.02; // Default fallback (1/50)
             try (Statement stmt = con.createStatement();
                  ResultSet rs = stmt.executeQuery(sql)) {
@@ -348,7 +371,7 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get EGP per point: " + e.getMessage());
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
         }
         return 0.02; // Default fallback (1/50)
     }
@@ -361,8 +384,9 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
         double egpPerPoint = 1.0 / newPointsPerEGP;
         
         String sql = "INSERT INTO exchange_points (points_per_egp, egp_per_points) VALUES (?, ?)";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setInt(1, newPointsPerEGP);
@@ -374,7 +398,30 @@ public class DatabaseLoyaltyRepository implements ILoyaltyProgram {
             System.err.println("❌ Failed to update exchange rate: " + e.getMessage());
             return false;
         } finally {
-            if (con != null) { try { con.close(); } catch (SQLException ignored) {} }
+            DatabaseRepository.returnConnection(con);
+        }
+    }
+    
+    /**
+     * Update both exchange rates independently (admin function)
+     */
+    public boolean updateExchangeRates(int newPointsPerEGP, double newEGPPerPoints) {
+        String sql = "INSERT INTO exchange_points (points_per_egp, egp_per_points) VALUES (?, ?)";
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return false;
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setInt(1, newPointsPerEGP);
+                pstmt.setDouble(2, newEGPPerPoints);
+                int rowsAffected = pstmt.executeUpdate();
+                return rowsAffected > 0;
+            }
+        } catch (SQLException e) {
+            System.err.println("❌ Failed to update exchange rates: " + e.getMessage());
+            return false;
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
     }
     

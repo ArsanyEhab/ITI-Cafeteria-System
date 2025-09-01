@@ -3,7 +3,7 @@ import contracts.IOrderRepository;
 import domain.MenuItem;
 import domain.Order;
 import domain.Student;
-import CrossCutting.TimeZoneConverter;
+
 
 import java.sql.*;
 import java.util.*;
@@ -14,7 +14,9 @@ public class DatabaseOrderRepository implements IOrderRepository {
     
     // Check if order_items table exists and has correct structure
     private boolean checkOrderItemsTable() {
-        try (Connection con = DatabaseRepository.createNewConnection()) {
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             
             // Check if table exists
@@ -27,22 +29,13 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 }
             }
             
-            // Check table structure
-            String checkStructureSql = "DESCRIBE order_items";
-            try (Statement stmt = con.createStatement();
-                 ResultSet rs = stmt.executeQuery(checkStructureSql)) {
-                System.out.println("📋 order_items table structure:");
-                while (rs.next()) {
-                    String field = rs.getString("Field");
-                    String type = rs.getString("Type");
-                    String key = rs.getString("Key");
-                    System.out.println("  - " + field + " (" + type + ") " + key);
-                }
-            }
+
             return true;
         } catch (SQLException e) {
             System.err.println("❌ Failed to check order_items table: " + e.getMessage());
             return false;
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
     }
     
@@ -54,41 +47,46 @@ public class DatabaseOrderRepository implements IOrderRepository {
         List<Order> orders = new ArrayList<>();
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             Statement stmt = con != null ? con.createStatement() : null;
-             ResultSet rs = stmt != null ? stmt.executeQuery(sql) : null) {
-            if (stmt == null || rs == null) return orders;
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return orders;
 
-            while (rs.next()) {
-                // Create student object
-                Student student = new Student(
-                        rs.getString("student_name"),
-                        rs.getString("student_id"),
-                        "" // Password not needed
-                );
+            try (Statement stmt = con.createStatement();
+                 ResultSet rs = stmt.executeQuery(sql)) {
 
-                // Convert UTC timestamp to Cairo time
-                java.util.Date utcDate = rs.getTimestamp("order_date");
-                java.util.Date cairoDate = TimeZoneConverter.convertUTCToCairoDate(utcDate);
+                while (rs.next()) {
+                    // Create student object
+                    Student student = new Student(
+                            rs.getString("student_name"),
+                            rs.getString("student_id"),
+                            "" // Password not needed
+                    );
 
-                // Create order object
-                Order order = new Order(
-                        rs.getInt("order_id"),
-                        Integer.parseInt(rs.getString("student_id")),
-                        rs.getDouble("total_cost"),
-                        rs.getDouble("discount_applied"),
-                        rs.getString("status"),
-                        student,
-                        cairoDate
-                );
+                    // Use timestamp directly (no timezone conversion)
+                    java.util.Date orderDate = rs.getTimestamp("order_date");
 
-                // Add order items
-                getOrderItems(order.getOrderID()).forEach(order::addItem);
+                    // Create order object
+                    Order order = new Order(
+                            rs.getInt("order_id"),
+                            rs.getString("student_id"),
+                            rs.getDouble("total_cost"),
+                            rs.getDouble("discount_applied"),
+                            rs.getString("status"),
+                            student,
+                            orderDate
+                    );
 
-                orders.add(order);
+                    // Add order items
+                    getOrderItems(order.getOrderID()).forEach(order::addItem);
+
+                    orders.add(order);
+                }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch orders: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return orders;
     }
@@ -98,36 +96,41 @@ public class DatabaseOrderRepository implements IOrderRepository {
         infrastructure.InMemoryUserRepository db = new infrastructure.InMemoryUserRepository();
         String sql = "SELECT o.* FROM orders o WHERE o.student_id = ? ORDER BY o.order_date DESC";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
-            if (pstmt == null) return orders;
-            pstmt.setString(1, studentId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    Student std = db.findById(studentId);
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return orders;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, studentId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Student std = db.findById(studentId);
 
-                    // Convert UTC timestamp to Cairo time
-                    java.util.Date utcDate = rs.getTimestamp("order_date");
-                    java.util.Date cairoDate = CrossCutting.TimeZoneConverter.convertUTCToCairoDate(utcDate);
-                    
-                    Order order = new Order(
-                            rs.getInt("order_id"),
-                            Integer.parseInt(rs.getString("student_id")),
-                            rs.getDouble("total_cost"),
-                            rs.getDouble("discount_applied"),
-                            rs.getString("status"),
-                            std,
-                            cairoDate
-                    );
+                        // Use timestamp directly (no timezone conversion)
+                        java.util.Date orderDate = rs.getTimestamp("order_date");
+                        
+                        Order order = new Order(
+                                rs.getInt("order_id"),
+                                rs.getString("student_id"),
+                                rs.getDouble("total_cost"),
+                                rs.getDouble("discount_applied"),
+                                rs.getString("status"),
+                                std,
+                                orderDate
+                        );
 
-                    // Add order items
-                    getOrderItems(order.getOrderID()).forEach(order::addItem);
+                        // Add order items
+                        getOrderItems(order.getOrderID()).forEach(order::addItem);
 
-                    orders.add(order);
+                        orders.add(order);
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch student orders: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return orders;
     }
@@ -136,38 +139,44 @@ public class DatabaseOrderRepository implements IOrderRepository {
         List<Order> orders = new ArrayList<>();
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id WHERE o.status = ?";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
-            if (pstmt == null) return orders;
-            pstmt.setString(1, status);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    // Create student object
-                    Student student = new Student(
-                            rs.getString("student_name"),
-                            rs.getString("student_id"),
-                            "" // Password not needed
-                    );
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return orders;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, status);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        // Create student object
+                        Student student = new Student(
+                                rs.getString("student_name"),
+                                rs.getString("student_id"),
+                                "" // Password not needed
+                        );
 
-                    // Create order object
-                    Order order = new Order(
-                            rs.getInt("order_id"),
-                            Integer.parseInt(rs.getString("student_id")),
-                            rs.getDouble("total_cost"),
-                            rs.getDouble("discount_applied"),
-                            rs.getString("status"),
-                            student,
-                            rs.getTimestamp("order_date")
-                    );
+                        // Create order object
+                        Order order = new Order(
+                                rs.getInt("order_id"),
+                                rs.getString("student_id"),
+                                rs.getDouble("total_cost"),
+                                rs.getDouble("discount_applied"),
+                                rs.getString("status"),
+                                student,
+                                rs.getTimestamp("order_date")
+                        );
 
-                    // Add order items
-                    getOrderItems(order.getOrderID()).forEach(order::addItem);
+                        // Add order items
+                        getOrderItems(order.getOrderID()).forEach(order::addItem);
 
-                    orders.add(order);
+                        orders.add(order);
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch orders by status: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return orders;
     }
@@ -179,28 +188,34 @@ public class DatabaseOrderRepository implements IOrderRepository {
                     "JOIN menu_items m ON oi.menu_item_id = m.menu_item_id " +
                     "WHERE oi.order_id = ?";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
-            if (pstmt == null) return items;
-            pstmt.setInt(1, orderId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    // Add each menu item according to quantity
-                    for (int i = 0; i < rs.getInt("quantity"); i++) {
-                        // Create MenuItem with complete data from menu_items table
-                        MenuItem item = new MenuItem(
-                                rs.getInt("menu_item_id"),
-                                rs.getString("name"),
-                                rs.getString("description"),
-                                rs.getDouble("price"),
-                                rs.getString("category")
-                        );
-                        items.add(item);
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return items;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setInt(1, orderId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        // Add each menu item according to quantity
+                        for (int i = 0; i < rs.getInt("quantity"); i++) {
+                            // Create MenuItem with complete data from menu_items table
+                            MenuItem item = new MenuItem(
+                                    rs.getInt("menu_item_id"),
+                                    rs.getString("name"),
+                                    rs.getString("description"),
+                                    rs.getDouble("price"),
+                                    rs.getString("category")
+                            );
+                            items.add(item);
+                        }
                     }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch order items: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return items;
     }
@@ -213,7 +228,9 @@ public class DatabaseOrderRepository implements IOrderRepository {
             return false;
         }
         
-        try (Connection con = DatabaseRepository.createNewConnection()) {
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             con.setAutoCommit(false);
 
@@ -264,9 +281,6 @@ public class DatabaseOrderRepository implements IOrderRepository {
                         itemStmt.setInt(3, totalQuantity); // Use the total quantity for this item
                         itemStmt.setDouble(4, item.getPrice()); // Use the actual item price
                         itemStmt.executeUpdate();
-                        System.out.println("✅ Order item inserted: order_id=" + order.getOrderID() + 
-                                        ", menu_item_id=" + menuItemId + 
-                                        ", quantity=" + totalQuantity + ", price=" + item.getPrice());
                     } catch (SQLException e) {
                         System.err.println("❌ Failed to insert order item: " + e.getMessage());
                         throw e; // Re-throw to trigger rollback
@@ -287,14 +301,26 @@ public class DatabaseOrderRepository implements IOrderRepository {
 
         } catch (SQLException e) {
             System.err.println("❌ Failed to place order: " + e.getMessage());
-            System.err.println("❌ Failed to place order: " + e.getMessage());
             return false;
+        } finally {
+            if (con != null) {
+                try {
+                    if (con.getAutoCommit() == false) {
+                        con.rollback();
+                    }
+                } catch (SQLException rollbackEx) {
+                    System.err.println("❌ Failed to rollback: " + rollbackEx.getMessage());
+                }
+                DatabaseRepository.returnConnection(con);
+            }
         }
     }
 
     public boolean updateOrderStatus(int orderId, String status) {
         String sql = "UPDATE orders SET status = ? WHERE order_id = ?";
-        try (Connection con = DatabaseRepository.createNewConnection()) {
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             con.setAutoCommit(false);
 
@@ -376,27 +402,46 @@ public class DatabaseOrderRepository implements IOrderRepository {
         } catch (SQLException e) {
             System.err.println("❌ Failed to update order status: " + e.getMessage());
             return false;
+        } finally {
+            if (con != null) {
+                try {
+                    if (con.getAutoCommit() == false) {
+                        con.rollback();
+                    }
+                } catch (SQLException rollbackEx) {
+                    System.err.println("❌ Failed to rollback: " + rollbackEx.getMessage());
+                }
+                DatabaseRepository.returnConnection(con);
+            }
         }
     }
 
     public boolean applyDiscountToOrder(int orderId, double discountAmount) {
         String sql = "UPDATE orders SET discount_applied = ?, total_cost = total_cost - ? WHERE order_id = ? AND status = 'pending'";
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
-            if (pstmt == null) return false;
-            pstmt.setDouble(1, discountAmount);
-            pstmt.setDouble(2, discountAmount);
-            pstmt.setInt(3, orderId);
-            int rowsAffected = pstmt.executeUpdate();
-            return rowsAffected > 0;
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return false;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setDouble(1, discountAmount);
+                pstmt.setDouble(2, discountAmount);
+                pstmt.setInt(3, orderId);
+                int rowsAffected = pstmt.executeUpdate();
+                return rowsAffected > 0;
+            }
         } catch (SQLException e) {
             System.err.println("❌ Failed to apply discount: " + e.getMessage());
             return false;
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
     }
 
     public boolean deleteOrder(int orderId) {
-        try (Connection con = DatabaseRepository.createNewConnection()) {
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             con.setAutoCommit(false);
 
@@ -423,6 +468,17 @@ public class DatabaseOrderRepository implements IOrderRepository {
         } catch (SQLException e) {
             System.err.println("❌ Failed to delete order: " + e.getMessage());
             return false;
+        } finally {
+            if (con != null) {
+                try {
+                    if (con.getAutoCommit() == false) {
+                        con.rollback();
+                    }
+                } catch (SQLException rollbackEx) {
+                    System.err.println("❌ Failed to rollback: " + rollbackEx.getMessage());
+                }
+                DatabaseRepository.returnConnection(con);
+            }
         }
     }
 
@@ -434,21 +490,28 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 "GROUP BY DATE(order_date) " +
                 "ORDER BY date";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setString(1, startDate);
-            pstmt.setString(2, endDate);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> stat = new HashMap<>();
-                    stat.put("date", rs.getDate("date"));
-                    stat.put("order_count", rs.getInt("order_count"));
-                    stat.put("total_revenue", rs.getDouble("total_revenue"));
-                    statistics.add(stat);
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return statistics;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setString(1, startDate);
+                pstmt.setString(2, endDate);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> stat = new HashMap<>();
+                        stat.put("date", rs.getDate("date"));
+                        stat.put("order_count", rs.getInt("order_count"));
+                        stat.put("total_revenue", rs.getDouble("total_revenue"));
+                        statistics.add(stat);
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to get order statistics: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return statistics;
     }
@@ -464,21 +527,28 @@ public class DatabaseOrderRepository implements IOrderRepository {
                 "ORDER BY total_quantity DESC " +
                 "LIMIT ?";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con.prepareStatement(sql)) {
-            pstmt.setInt(1, limit);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                while (rs.next()) {
-                    Map<String, Object> item = new HashMap<>();
-                    item.put("menu_item_id", rs.getInt("menu_item_id"));
-                    item.put("name", rs.getString("name"));
-                    item.put("category", rs.getString("category"));
-                    item.put("total_quantity", rs.getInt("total_quantity"));
-                    items.add(item);
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return result;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setInt(1, limit);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    while (rs.next()) {
+                        Map<String, Object> item = new HashMap<>();
+                        item.put("menu_item_id", rs.getInt("menu_item_id"));
+                        item.put("name", rs.getString("name"));
+                        item.put("category", rs.getString("category"));
+                        item.put("total_quantity", rs.getInt("total_quantity"));
+                        items.add(item);
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to get top selling items: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
 
         result.put("top_items", items);
@@ -489,42 +559,47 @@ public class DatabaseOrderRepository implements IOrderRepository {
     public Order findById(int orderId) {
         String sql = "SELECT o.*, s.name as student_name FROM orders o JOIN students s ON o.student_id = s.student_id WHERE o.order_id = ?";
 
-        try (Connection con = DatabaseRepository.createNewConnection();
-             PreparedStatement pstmt = con != null ? con.prepareStatement(sql) : null) {
-            if (pstmt == null) return null;
-            pstmt.setInt(1, orderId);
-            try (ResultSet rs = pstmt.executeQuery()) {
-                if (rs.next()) {
-                    // Create student object
-                    Student student = new Student(
-                            rs.getString("student_name"),
-                            rs.getString("student_id"),
-                            "" // Password not needed
-                    );
+        Connection con = null;
+        try {
+            con = DatabaseRepository.getConnection();
+            if (con == null) return null;
+            
+            try (PreparedStatement pstmt = con.prepareStatement(sql)) {
+                pstmt.setInt(1, orderId);
+                try (ResultSet rs = pstmt.executeQuery()) {
+                    if (rs.next()) {
+                        // Create student object
+                        Student student = new Student(
+                                rs.getString("student_name"),
+                                rs.getString("student_id"),
+                                "" // Password not needed
+                        );
 
-                    // Convert UTC timestamp to Cairo time for findById method
-                    java.util.Date utcDate = rs.getTimestamp("order_date");
-                    java.util.Date cairoDate = TimeZoneConverter.convertUTCToCairoDate(utcDate);
+                        // Use timestamp directly (no timezone conversion)
+                        java.util.Date orderDate = rs.getTimestamp("order_date");
 
-                    // Create order object
-                    Order order = new Order(
-                            rs.getInt("order_id"),
-                            Integer.parseInt(rs.getString("student_id")),
-                            rs.getDouble("total_cost"),
-                            rs.getDouble("discount_applied"),
-                            rs.getString("status"),
-                            student,
-                            cairoDate
-                    );
+                        // Create order object
+                        Order order = new Order(
+                                rs.getInt("order_id"),
+                                rs.getString("student_id"),
+                                rs.getDouble("total_cost"),
+                                rs.getDouble("discount_applied"),
+                                rs.getString("status"),
+                                student,
+                                orderDate
+                        );
 
-                    // Add order items
-                    getOrderItems(order.getOrderID()).forEach(order::addItem);
+                        // Add order items
+                        getOrderItems(order.getOrderID()).forEach(order::addItem);
 
-                    return order;
+                        return order;
+                    }
                 }
             }
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch order: " + e.getMessage());
+        } finally {
+            DatabaseRepository.returnConnection(con);
         }
         return null;
     }

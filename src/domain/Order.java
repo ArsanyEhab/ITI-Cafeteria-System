@@ -1,12 +1,11 @@
 package domain;
 
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 public class Order {
     private int orderID;
-    private int studentID;
+    private String studentID;
     private List<MenuItem> items = new ArrayList<>();
     private  double totalCost;
     private double discountApplied;
@@ -14,7 +13,7 @@ public class Order {
     private Student student;
     private Date date = new Date();
 
-    public Order(int orderID, int studentID, double totalCost, double discountApplied, String status, Student student, Date date) {
+    public Order(int orderID, String studentID, double totalCost, double discountApplied, String status, Student student, Date date) {
         this.orderID = orderID;
         this.studentID = studentID;
         this.totalCost = totalCost;
@@ -40,7 +39,7 @@ public class Order {
 
     public int getOrderID() { return orderID; }
     public void setOrderID(int orderID) { this.orderID = orderID; }
-    public int getStudentId() { return studentID; }
+    public String getStudentId() { return studentID; }
     public String getItemName() { 
         if (items.isEmpty()) return "No items";
         return items.get(0).getName(); // Return first item name for simplicity

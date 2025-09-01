@@ -38,8 +38,9 @@ public class ConsoleNotificationService implements INotificationService {
 
     public boolean addNotification(String studentId, String message) {
         String sql = "INSERT INTO notifications (student_id, message) VALUES (?, ?)";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -51,15 +52,16 @@ public class ConsoleNotificationService implements INotificationService {
             System.err.println("❌ Failed to add notification: " + e.getMessage());
             return false;
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
     }
 
     public List<Map<String, Object>> getStudentNotifications(String studentId) {
         List<Map<String, Object>> notifications = new ArrayList<>();
         String sql = "SELECT * FROM notifications WHERE student_id = ? ORDER BY created_at DESC";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return notifications;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -85,15 +87,16 @@ public class ConsoleNotificationService implements INotificationService {
         } catch (SQLException e) {
             System.err.println("❌ Failed to fetch notifications: " + e.getMessage());
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
         return notifications;
     }
     
     public boolean deleteNotification(int notificationId) {
         String sql = "DELETE FROM notifications WHERE notification_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setInt(1, notificationId);
@@ -104,14 +107,15 @@ public class ConsoleNotificationService implements INotificationService {
             System.err.println("❌ Failed to delete notification: " + e.getMessage());
             return false;
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
     }
     
     public boolean clearAllStudentNotifications(String studentId) {
         String sql = "DELETE FROM notifications WHERE student_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -122,7 +126,7 @@ public class ConsoleNotificationService implements INotificationService {
             System.err.println("❌ Failed to clear notifications: " + e.getMessage());
             return false;
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
     }
     
@@ -138,8 +142,9 @@ public class ConsoleNotificationService implements INotificationService {
     
     public boolean notifyAllStudents(String message) {
         String sql = "INSERT INTO notifications (student_id, message) SELECT student_id, ? FROM students";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, message);
@@ -150,7 +155,7 @@ public class ConsoleNotificationService implements INotificationService {
             System.err.println("❌ Failed to notify all students: " + e.getMessage());
             return false;
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
     }
     
@@ -165,8 +170,9 @@ public class ConsoleNotificationService implements INotificationService {
         }
         
         String sql = "UPDATE notifications SET is_read = 1 WHERE notification_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setInt(1, notificationId);
@@ -177,7 +183,7 @@ public class ConsoleNotificationService implements INotificationService {
             System.err.println("❌ Failed to mark notification as read: " + e.getMessage());
             return false;
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
     }
     
@@ -192,8 +198,9 @@ public class ConsoleNotificationService implements INotificationService {
         }
         
         String sql = "SELECT COUNT(*) FROM notifications WHERE student_id = ? AND (is_read = 0 OR is_read IS NULL)";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 0;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -206,7 +213,7 @@ public class ConsoleNotificationService implements INotificationService {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get unread notifications count: " + e.getMessage());
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
         return 0;
     }
@@ -216,8 +223,9 @@ public class ConsoleNotificationService implements INotificationService {
      */
     private int getTotalNotificationsCount(String studentId) {
         String sql = "SELECT COUNT(*) FROM notifications WHERE student_id = ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return 0;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -230,7 +238,7 @@ public class ConsoleNotificationService implements INotificationService {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get total notifications count: " + e.getMessage());
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
         return 0;
     }
@@ -240,8 +248,9 @@ public class ConsoleNotificationService implements INotificationService {
      */
     private boolean columnExists(String tableName, String columnName) {
         String sql = "SHOW COLUMNS FROM " + tableName + " LIKE ?";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return false;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, columnName);
@@ -252,7 +261,7 @@ public class ConsoleNotificationService implements INotificationService {
         } catch (SQLException e) {
             System.err.println("❌ Failed to check if column exists: " + e.getMessage());
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
         return false;
     }
@@ -299,8 +308,9 @@ public class ConsoleNotificationService implements INotificationService {
      */
     public String getLatestNotificationMessage(String studentId) {
         String sql = "SELECT message FROM notifications WHERE student_id = ? ORDER BY created_at DESC LIMIT 1";
-        Connection con = DatabaseRepository.createNewConnection();
+        Connection con = null;
         try {
+            con = DatabaseRepository.getConnection();
             if (con == null) return null;
             try (PreparedStatement pstmt = con.prepareStatement(sql)) {
                 pstmt.setString(1, studentId);
@@ -313,7 +323,7 @@ public class ConsoleNotificationService implements INotificationService {
         } catch (SQLException e) {
             System.err.println("❌ Failed to get latest notification: " + e.getMessage());
         } finally {
-            try { if (con != null) con.close(); } catch (SQLException ignored) {}
+            DatabaseRepository.returnConnection(con);
         }
         return null;
     }
