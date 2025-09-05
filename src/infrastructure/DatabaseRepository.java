@@ -22,10 +22,10 @@ public class DatabaseRepository {
     private static final ReentrantLock poolLock = new ReentrantLock();
     
     // Database configuration
-    private static final String URL = "jdbc:mysql://cafeteria-system-cafeteria-system.k.aivencloud.com:14411/defaultdb?sslmode=require&useSSL=true&serverTimezone=UTC&allowPublicKeyRetrieval=true";
-    private static final String USER = "avnadmin";
-    private static final String PASSWORD = "AVNS_3QRmLrF1K5jfZ_qfPsn";
-    
+    private static final String URL;
+    private static final String USER;
+    private static final String PASSWORD;
+
     // Connection monitoring
     private static final ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
     private static volatile boolean isInitialized = false;
